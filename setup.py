@@ -1,7 +1,7 @@
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
+from ez_setup import use_setuptools
+use_setuptools()
+
+from setuptools import setup, find_packages
 
 config = {
     'description': 'database import export utility',
@@ -10,9 +10,13 @@ config = {
     'download_url': 'https://github.com/3nth/diepy',
     'author_email': 'derek.flenniken@ucsf.edu',
     'version': '0.1',
-    'install_requires': ['nose', 'json'],
-    'packages': ['diepy'],
-    'scripts': ['diepy/cli.py'],
+    'install_requires': ['nose', 'pyodbc'],
+    'packages': find_packages(),
+    'entry_points': {
+        'console_scripts': [
+            'diepy = diepy.cli:run'
+        ]
+    },
     'name': 'diepy'
 }
 
