@@ -1,16 +1,14 @@
-
 import logging
-import os
-from os import path
 from optparse import OptionParser
 
-import diepy
+from . import core
 
 logging.basicConfig()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 parser = OptionParser()
+parser.add_option("command", dest="command")
 parser.add_option("-s", "--server", dest="server", default="MNEMOSYNE", help="Database to connect to")
 parser.add_option("-d", "--database", dest="database", help="Database to connect to.")
 parser.add_option("-c", "--schema", dest="schema", default="dbo", help="Schema name")
@@ -19,28 +17,25 @@ parser.add_option("--tab", dest="tab", action="store_true", default=False, help=
 
 (options, args) = parser.parse_args()
 
-
 if options.tab:
     delimiter = '\t'
 else:
     delimiter = ','
 
-db = diepy.dbserver()
-db.connect(options.server, options.database)
+if options.command == 'import':
+    core.import_files(options.server,
+                      options.database,
+                      options.schema,
+                      options.table,
+                      delimiter,
+                      args)
 
-for inpath in args:
-    if path.isdir(inpath):
-        for name in os.listdir(inpath):
-            if not name.endswith('.csv'):
-                continue
-            print 'Importing: ' + name
-            db.store_file(path.join(inpath, name), options.schema, delimiter=delimiter)
-    elif path.isfile(inpath):
-        db.store_file(inpath, options.schema, options.table, delimiter=delimiter)
-    
-
-
-
+elif options.command == 'export':
+    core.export_table(options.server,
+                      options.database,
+                      options.schema,
+                      options.table,
+                      args[0])
 
 
 
