@@ -1,13 +1,10 @@
-diepy
-=====
-
 ## diepy is
 
 a stinky wrapper for you database needs
 
 ## diepy needs
 
-#### login information
+#### connection strings
 
 ## diepy does
 

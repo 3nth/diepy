@@ -1,61 +1,118 @@
-__author__ = 'VHASFCFLENND'
 import csv
-import pyodbc
 import logging
-import subprocess
-from os import path, listdir
+from ConfigParser import SafeConfigParser
 import time
-import gzip
-import shutil
-import sys
+from datetime import datetime
 
-logger = logging.getLogger('diepy')
+import sqlalchemy
 
+
+logger = logging.getLogger(__name__)
+    
 class dbserver(object):
+    
+    def __init__(self, server, database = None):
+        self.metadata = sqlalchemy.MetaData()
+        self.engine = None
+        
+        logger.info('Parsing config file...')
+        parser = SafeConfigParser()
+        parser.read('diepy.ini')
 
-    connected = False
-
-    def __init__(self):
-        self._cn = None
-
-    def connect(self, server, database=None,username=None,password=None,trusted=False):
-        # connectionString = ( r'DRIVER={SQL Server};Server=%s;Database=%s;UID=%s;PWD=%s' % (server, database, user, password))
-        connectionString = ( r'DRIVER={SQL Server};Server=%s;Database=%s;Trusted_Connection=yes' % (server, database))
-
-        logger.info("Connecting to %s on %s" % (database, server))
+        cstring = parser.get('servers', server)
+    
+        logger.info('Connecting to database...')
+        self.engine = sqlalchemy.create_engine(cstring)
+        self.metadata.bind = self.engine
+    
+    def import_file(self, filepath, table_name = None, schema=None, delimiter=','):
         try:
-            self._cn = pyodbc.connect(connectionString)
-            self.connected = True
-        except:
-            logger.exception("Unable to connect to %s on %s" % (database, server))
-
-    def store_file(self, filepath, schema, table = None, delimiter=','):
-        strip_nul_bytes(filepath)
-        try:
-            if not table:
-                (table, ext) = path.splitext(path.basename(filepath))
-
-            cursor = self._cn.cursor()
-
-            if not self.table_exists(schema, table):
-                sql = generate_schema(schema, table, filepath, delimiter)
-                cursor.execute(sql)
-                self._cn.commit()
-            rows = self.store_data(filepath, schema, table,delimiter)
-            logger.info("Stored %s records from %s in %s.%s" % (rows, filepath, schema, table))
+            if not table_name:
+                (table_name, ext) = path.splitext(path.basename(filepath))
+            
+            if not self.table_exists(table_name, schema):
+                
+                self.create_table(table_name, filepath, delimiter, schema=schema)
+            
+            table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
+            
+            rows = self.store_data(filepath, table, delimiter)
+            logger.info("Stored %s records from %s in %s" % (rows, filepath, table.name))
         except:
             logger.exception("Had some trouble storing %s" % filepath)
+    
+    def table_exists(self, table_name, schema=None):
+        exists = self.engine.dialect.has_table(self.engine.connect(), table_name, schema=schema)
+        if not exists:
+            logger.warn("Table '%s' does not exist." % table_name)
+        return exists
+        
+    def create_table(self, table_name, filepath, delimiter, schema=None):
+        logger.info("Creating table for '%s' ..." % filepath)
+        table = sqlalchemy.Table(table_name, self.metadata, schema=schema)
+        for k, v in generate_schema(filepath, delimiter).items():
+            table.append_column(v.emit())
+            
+        table.create(self.engine)
+    
+    def store_data(self, filepath, table, delimiter=','):
+        cn = self.engine.connect()
+        infile = open(filepath, 'rb')
+        dr = csv.DictReader(infile, delimiter=delimiter)
+        errors = 0
+        rows = 0
+        batch = []
+        for row in dr:
+            rows += 1
+            record = {k: self.cast_data(k, v, table) for k, v in row.items()}
+            batch.append(record)
+            if rows % 100 == 0:
+                cn.execute(table.insert(), batch)
+                batch = []
+                print "\r%s records..." % rows,
+                sys.stdout.flush()
 
-    def table_exists(self, schema, table):
-        cursor = self._cn.cursor()
-        sql = "SELECT OBJECT_ID(N'%s.%s', N'U')" % (schema, table)
-        logger.debug(sql)
-        results = cursor.execute(sql).fetchone()
-        if results[0]:
-            return True
-        return False
+        print "\r                             \r",
+        
+        if len(batch) > 0:
+            cn.execute(table.insert(), batch)
 
-    def dump_table_to_csv(self, database, schema, table, filename, unix=False, zip=False):
+        if errors > 0:
+            raise Exception, "Had trouble storing %s in %s\n%i errors in %i records" % (filepath, table.name, errors, rows )
+
+        return rows
+     
+    def cast_data(self, k, v, table):
+        
+        if v is None or v == '':
+            return None
+        
+        logger.info('Attempting to cast %s as %s ...' % (v, table.c[k].type)) 
+        if isinstance(table.c[k].type, sqlalchemy.types.DATETIME):
+            return self.cast_datetime(v)
+        
+        return v
+    
+    def cast_datetime(self, v):
+        logger.info('Attempting to cast %s as datetime...' % v)
+        try:
+            return datetime.strptime(v, "%m/%d/%y")
+        except ValueError:
+            pass
+            
+        try:
+            return datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            pass
+        
+        return v
+            
+    def export_table(self, table, filename, schema=None, unix=False, zip=False):
+        mytable = sqlalchemy.Table(table, self.metadata, autoload=True, schema=schema)
+        db_connection = self.engine.connect()
+
+        select = sqlalchemy.sql.select([mytable])
+        result = db_connection.execute(select)
 
         if zip:
             if not filename.endswith('.gz'):
@@ -63,9 +120,7 @@ class dbserver(object):
             f = gzip.open(filename, 'wb')
         else:
             f = open(filename, 'wb')
-
-        records = 0
-
+        
         try:
             if unix:
                 lineterminator = '\n'
@@ -73,23 +128,16 @@ class dbserver(object):
                 lineterminator = '\r\n'
 
             writer = csv.writer(f, lineterminator=lineterminator)
-
-            sql = "SELECT * FROM %s.%s.%s" % (database, schema, table)
-            cursor = self._cn.cursor()
-            cursor.execute(sql)
-            rowcount = cursor.rowcount
-            writer.writerow([x[0] for x in cursor.description])
-
-            for row in cursor:
+            writer.writerow(result.keys())
+            records = 0
+            for row in result:
                 cleaned = [self._cleanbool(x) for x in row]
                 writer.writerow(cleaned)
                 records += 1
 
         finally:
             f.close()
-
-        return records
-
+            
     def _cleanbool(self, value):
         if value is None:
             return value
@@ -99,89 +147,23 @@ class dbserver(object):
         if type(value) is bool and not value:
             return 0
         return value
-
-    def dump_table_to_excel(self, tablename, filename):
-        cmd = ['\\\\sfc-9lrba_vs1\\MRSU_Central\\Database\\Transfers\\Tools\\ExportToExcel2\\ExportToExcel.exe', '--table', tablename, '--filename', filename]
-        logger.debug(subprocess.list2cmdline(cmd))
-        proc = subprocess.Popen(cmd, shell=True,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE
-                                )
-        (output, error) = proc.communicate()
-        if error:
-            logger.error(error)
-        if output:
-            logger.info(output)
-
-    def store_data(self, filepath, schema, table, delimiter=','):
-
-        cursor = self._cn.cursor()
-        cursor.execute("TRUNCATE TABLE [%s].[%s]" % (schema, table))
-        infile = open(filepath, 'rb')
-        dr = csv.DictReader(infile, delimiter=delimiter)
-        errors = 0
-        rows = 0
-        sql = None
-        for row in dr:
-            rows += 1
-            if not sql:
-                sql = "INSERT INTO [%s].[%s] (%s) VALUES (%s)" % (schema, table, "[" + "], [".join(dr.fieldnames) + "]", ", ".join(["?" for field in dr.fieldnames]))
-                logger.debug(sql)
-            values = [row[field] if row[field] != '' else None for field in dr.fieldnames]
-            try:
-                cursor.execute(sql, values)
-            except:
-                errors += 1
-                logger.exception(row)
-
-            if rows % 100 == 0:
-                self._cn.commit()
-                print "\r%s records..." % rows,
-                sys.stdout.flush()
-
-        print "\r                             \r",
-        self._cn.commit()
-
-        if errors > 0:
-            raise Exception, "Had trouble storing %s in %s.%s\n%i errors in %i records" % (filepath, schema, table, errors, rows )
-
-        return rows
-
-def strip_nul_bytes(file):
-    orig = file + '.orig'
-    shutil.move(file, orig)
-    fi = open(orig, 'rb')
-    fo = open(file, 'wb')
-    while True:
-        chunk = fi.read(8192)
-        if not chunk:
-            break
-        fo.write(chunk.replace('\x00', ''))
-
-    fi.close()
-    fo.close()
-
-def generate_schema(schema, table, filepath, delimiter=','):
+            
+    
+        
+def generate_schema(filepath, delimiter=','):
     '''Generates a table DDL statement based on the file'''
-
+    logger.info("Generating schema for '%s'" % filepath)
     infile = open(filepath, 'rb')
     dr = csv.DictReader(infile, delimiter=delimiter)
 
-    fields = {}
+    columns = {}
     for row in dr:
         for field in dr.fieldnames:
-            if not fields.has_key(field):
-                fields[field] = columndef(field)
-            fields[field].sample_value(row[field])
+            if not columns.has_key(field):
+                columns[field] = columndef(field)
+            columns[field].sample_value(row[field])
 
-    body = []
-
-    for name in dr.fieldnames:
-        body.append(fields[name].print_sql())
-
-    schema = 'CREATE TABLE [%s].[%s] (\n\t%s\n)' % (schema, table, "\n\t, ".join(body))
-    logger.debug(schema)
-    return schema
+    return columns
 
 class columndef(object):
     '''Defines the schema for a table column'''
@@ -226,41 +208,35 @@ class columndef(object):
             else:
                 self.type = 'text'
 
-    def print_sql(self):
+    def emit(self):
         '''Prints the DDL for defining the column'''
 
         if self.type == '':
             self.type = 'text'
 
-        sql = "[" + self.name + "]"
         if self.type == 'int' and self.max_value > 32768:
-            sql += ' INT'
+            return sqlalchemy.Column(self.name, sqlalchemy.Integer, nullable=self.nullable)
         elif self.type =='int':
-            sql += ' SMALLINT'
+            return sqlalchemy.Column(self.name, sqlalchemy.SmallInteger, nullable=self.nullable)
         elif self.type == 'float':
-            sql += ' FLOAT'
+            return sqlalchemy.Column(self.name, sqlalchemy.Float, nullable=self.nullable)
         elif self.type == 'date':
-            sql += ' DATETIME'
+            return sqlalchemy.Column(self.name, sqlalchemy.DateTime, nullable=self.nullable)
         elif self.type == 'text':
-            sql += ' VARCHAR('
             if self.length < 50:
-                sql += '50)'
+                return sqlalchemy.Column(self.name, sqlalchemy.String(50), nullable=self.nullable)
             elif self.length < 100:
-                sql += '100)'
-            elif  self.length < 200:
-                sql += '200)'
-            elif  self.length < 500:
-                sql += '500)'
-            elif  self.length < 1000:
-                sql += '1000)'
+                return sqlalchemy.Column(self.name, sqlalchemy.String(100), nullable=self.nullable)
+            elif self.length < 200:
+                return sqlalchemy.Column(self.name, sqlalchemy.String(200), nullable=self.nullable)
+            elif self.length < 500:
+                return sqlalchemy.Column(self.name, sqlalchemy.String(500), nullable=self.nullable)
+            elif self.length < 1000:
+                return sqlalchemy.Column(self.name, sqlalchemy.String(1000), nullable=self.nullable)
+            elif self.length < 4000:
+                return sqlalchemy.Column(self.name, sqlalchemy.String(4000), nullable=self.nullable)
             else:
-                sql += 'MAX)'
-        if self.nullable:
-            sql += ' NULL'
-        else:
-            sql += ' NOT NULL'
-
-        return sql
+                return sqlalchemy.Column(self.name, sqlalchemy.Text, nullable=self.nullable)
 
     def is_int(self, s):
         try:
@@ -277,30 +253,18 @@ class columndef(object):
             return False
 
     def is_date(self, s):
+        isdate = False
         try:
             time.strptime(s, "%m/%d/%y")
-            return True
+            isdate = True
         except ValueError:
-            return False
-
-
-
-def import_files(server, database, schema, table, delimiter, import_paths):
-    db = dbserver()
-    db.connect(server, database)
-
-    for inpath in import_paths:
-        if path.isdir(inpath):
-            for name in listdir(inpath):
-                if not name.endswith('.csv'):
-                    continue
-                print 'Importing: ' + name
-                db.store_file(path.join(inpath, name), schema, delimiter=delimiter)
-        elif path.isfile(inpath):
-            db.store_file(inpath, schema, table, delimiter=delimiter)
-
-
-def export_table(server, database, schema, table, export_path):
-    db = dbserver()
-    db.connect(server, database)
-    db.dump_table_to_csv(database, schema, table, export_path)
+            pass
+            
+        try:
+            time.strptime(s, "%Y-%m-%d")
+            isdate = True
+        except ValueError:
+            pass
+        
+        return isdate
+        
