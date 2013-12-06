@@ -1,60 +1,65 @@
 import csv
 import logging
 from ConfigParser import SafeConfigParser
-import time
 from datetime import datetime
+import sys
+from os import path
+import gzip
+import time
 
+from dateutil.parser import parse
 import sqlalchemy
 
-
 logger = logging.getLogger(__name__)
-    
-class dbserver(object):
-    
-    def __init__(self, server, database = None):
+
+
+class Database(object):
+    def __init__(self, server, database=None):
         self.metadata = sqlalchemy.MetaData()
         self.engine = None
-        
+
         logger.info('Parsing config file...')
         parser = SafeConfigParser()
         parser.read('diepy.ini')
 
         cstring = parser.get('servers', server)
-    
+
+        if database:
+            cstring = cstring.rstrip('/') + '/' + database
+
         logger.info('Connecting to database...')
         self.engine = sqlalchemy.create_engine(cstring)
         self.metadata.bind = self.engine
-    
-    def import_file(self, filepath, table_name = None, schema=None, delimiter=','):
+
+    def import_file(self, filepath, table_name=None, schema=None, delimiter=','):
         try:
             if not table_name:
                 (table_name, ext) = path.splitext(path.basename(filepath))
-            
+
             if not self.table_exists(table_name, schema):
-                
                 self.create_table(table_name, filepath, delimiter, schema=schema)
-            
+
             table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
-            
+
             rows = self.store_data(filepath, table, delimiter)
             logger.info("Stored %s records from %s in %s" % (rows, filepath, table.name))
         except:
             logger.exception("Had some trouble storing %s" % filepath)
-    
+
     def table_exists(self, table_name, schema=None):
         exists = self.engine.dialect.has_table(self.engine.connect(), table_name, schema=schema)
         if not exists:
             logger.warn("Table '%s' does not exist." % table_name)
         return exists
-        
+
     def create_table(self, table_name, filepath, delimiter, schema=None):
         logger.info("Creating table for '%s' ..." % filepath)
         table = sqlalchemy.Table(table_name, self.metadata, schema=schema)
         for k, v in generate_schema(filepath, delimiter).items():
             table.append_column(v.emit())
-            
+
         table.create(self.engine)
-    
+
     def store_data(self, filepath, table, delimiter=','):
         cn = self.engine.connect()
         infile = open(filepath, 'rb')
@@ -64,7 +69,7 @@ class dbserver(object):
         batch = []
         for row in dr:
             rows += 1
-            record = {k: self.cast_data(k, v, table) for k, v in row.items()}
+            record = {k: cast_data(k, v, table) for k, v in row.items()}
             batch.append(record)
             if rows % 100 == 0:
                 cn.execute(table.insert(), batch)
@@ -73,40 +78,16 @@ class dbserver(object):
                 sys.stdout.flush()
 
         print "\r                             \r",
-        
+
         if len(batch) > 0:
             cn.execute(table.insert(), batch)
 
         if errors > 0:
-            raise Exception, "Had trouble storing %s in %s\n%i errors in %i records" % (filepath, table.name, errors, rows )
+            raise Exception, "Had trouble storing %s in %s\n%i errors in %i records" % (
+                filepath, table.name, errors, rows)
 
         return rows
-     
-    def cast_data(self, k, v, table):
-        
-        if v is None or v == '':
-            return None
-        
-        logger.info('Attempting to cast %s as %s ...' % (v, table.c[k].type)) 
-        if isinstance(table.c[k].type, sqlalchemy.types.DATETIME):
-            return self.cast_datetime(v)
-        
-        return v
-    
-    def cast_datetime(self, v):
-        logger.info('Attempting to cast %s as datetime...' % v)
-        try:
-            return datetime.strptime(v, "%m/%d/%y")
-        except ValueError:
-            pass
-            
-        try:
-            return datetime.strptime(v, "%Y-%m-%d")
-        except ValueError:
-            pass
-        
-        return v
-            
+
     def export_table(self, table, filename, schema=None, unix=False, zip=False):
         mytable = sqlalchemy.Table(table, self.metadata, autoload=True, schema=schema)
         db_connection = self.engine.connect()
@@ -120,7 +101,7 @@ class dbserver(object):
             f = gzip.open(filename, 'wb')
         else:
             f = open(filename, 'wb')
-        
+
         try:
             if unix:
                 lineterminator = '\n'
@@ -132,13 +113,14 @@ class dbserver(object):
             records = 0
             for row in result:
                 cleaned = [self._cleanbool(x) for x in row]
-                writer.writerow(cleaned)
+                writer.writerow(row)
                 records += 1
 
         finally:
             f.close()
-            
-    def _cleanbool(self, value):
+
+    @staticmethod
+    def _cleanbool(value):
         if value is None:
             return value
 
@@ -146,12 +128,46 @@ class dbserver(object):
             return 1
         if type(value) is bool and not value:
             return 0
+        if type(value) is datetime:
+            return value.isoformat()
         return value
-            
-    
-        
+
+
+def cast_data(k, v, table):
+
+    if v is None or v == '':
+        return None
+
+    logger.info('Attempting to cast %s as %s ...' % (v, table.c[k].type))
+    if isinstance(table.c[k].type, sqlalchemy.types.DATETIME) or isinstance(table.c[k].type, sqlalchemy.types.DATE):
+        logger.info('Attempting to cast %s as %s ...' % (v, table.c[k].type))
+        v = parse(v)
+        logger.debug(v)
+
+    if isinstance(table.c[k].type, sqlalchemy.types.TIME):
+        dt = parse(v)
+        return dt.time()
+
+    return v
+
+
+def cast_datetime(v):
+    logger.info('Attempting to cast %s as datetime...' % v)
+    try:
+        return datetime.strptime(v, "%m/%d/%y")
+    except ValueError:
+        pass
+
+    try:
+        return datetime.strptime(v, "%Y-%m-%d")
+    except ValueError:
+        pass
+
+    return v
+
+
 def generate_schema(filepath, delimiter=','):
-    '''Generates a table DDL statement based on the file'''
+    """Generates a table DDL statement based on the file"""
     logger.info("Generating schema for '%s'" % filepath)
     infile = open(filepath, 'rb')
     dr = csv.DictReader(infile, delimiter=delimiter)
@@ -159,24 +175,26 @@ def generate_schema(filepath, delimiter=','):
     columns = {}
     for row in dr:
         for field in dr.fieldnames:
-            if not columns.has_key(field):
-                columns[field] = columndef(field)
+            if not field in columns:
+                columns[field] = ColumnDef(field)
             columns[field].sample_value(row[field])
 
     return columns
 
-class columndef(object):
-    '''Defines the schema for a table column'''
 
-    def __init__(self, name = ''):
+class ColumnDef(object):
+    """Defines the schema for a table column"""
+
+    def __init__(self, name=''):
         self.name = name
         self.nullable = False
         self.type = ''
         self.length = 0
         self.max_value = 0
+        self.min_value = 0
 
     def sample_value(self, value):
-        '''Samples a value to determine the datatype for the column'''
+        """Samples a value to determine the datatype for the column"""
 
         if value == '' or value is None:
             self.nullable = True
@@ -185,43 +203,54 @@ class columndef(object):
         if len(value) > self.length:
             self.length = len(value)
 
-        if self.is_int(value) and abs(int(value)) > self.max_value:
-            self.max_value = abs(int(value))
+        if is_int(value) and int(value) < self.min_value:
+            self.min_value = int(value)
+            
+        if is_int(value) and int(value) > self.max_value:
+            self.max_value = int(value)
 
         self._determine_type(value)
 
     def _determine_type(self, value):
-        if self.type == 'date' and not self.is_date(value):
+        if self.type == 'date' and not is_date(value):
             self.type = 'text'
-        if self.type == 'float' and not self.is_float(value):
+        if self.type == 'float' and not is_float(value):
             self.type = 'text'
-        if self.type == 'int' and not self.is_int(value):
+        if self.type == 'int' and not is_int(value):
             self.type = 'text'
 
         if self.type == '':
-            if self.is_date(value):
-                self.type = 'date'
-            elif self.is_int(value):
+            if is_int(value):
                 self.type = 'int'
-            elif self.is_float(value):
+            elif is_float(value):
                 self.type = 'float'
+            elif is_date(value):
+                self.type = 'date'
+            elif is_time(value):
+                self.type = 'time'
+            elif is_datetime(value):
+                self.type = 'datetime'
             else:
                 self.type = 'text'
 
     def emit(self):
-        '''Prints the DDL for defining the column'''
-
+        """Prints the DDL for defining the column"""
+        logger.debug("emitting '%s' as '%s'. Nullable: %s" % (self.name, self.type, self.nullable))
         if self.type == '':
             self.type = 'text'
 
         if self.type == 'int' and self.max_value > 32768:
-            return sqlalchemy.Column(self.name, sqlalchemy.Integer, nullable=self.nullable)
-        elif self.type =='int':
-            return sqlalchemy.Column(self.name, sqlalchemy.SmallInteger, nullable=self.nullable)
+            return sqlalchemy.Column(self.name, sqlalchemy.types.INT, nullable=self.nullable)
+        elif self.type == 'int':
+            return sqlalchemy.Column(self.name, sqlalchemy.types.SMALLINT, nullable=self.nullable)
         elif self.type == 'float':
-            return sqlalchemy.Column(self.name, sqlalchemy.Float, nullable=self.nullable)
+            return sqlalchemy.Column(self.name, sqlalchemy.types.FLOAT, nullable=self.nullable)
+        elif self.type == 'datetime':
+            return sqlalchemy.Column(self.name, sqlalchemy.types.DATETIME, nullable=self.nullable)
         elif self.type == 'date':
-            return sqlalchemy.Column(self.name, sqlalchemy.DateTime, nullable=self.nullable)
+            return sqlalchemy.Column(self.name, sqlalchemy.types.DATE, nullable=self.nullable)
+        elif self.type == 'time':
+            return sqlalchemy.Column(self.name, sqlalchemy.types.TIME, nullable=self.nullable)
         elif self.type == 'text':
             if self.length < 50:
                 return sqlalchemy.Column(self.name, sqlalchemy.String(50), nullable=self.nullable)
@@ -236,35 +265,78 @@ class columndef(object):
             elif self.length < 4000:
                 return sqlalchemy.Column(self.name, sqlalchemy.String(4000), nullable=self.nullable)
             else:
-                return sqlalchemy.Column(self.name, sqlalchemy.Text, nullable=self.nullable)
+                return sqlalchemy.Column(self.name, sqlalchemy.types.TEXT, nullable=self.nullable)
 
-    def is_int(self, s):
-        try:
-            int(s)
+
+def is_int(s):
+    try:
+        int(s)
+        return True
+    except ValueError:
+        logger.debug("Value is not an INT: %s" % s)
+        return False
+
+
+def is_float(s):
+    try:
+        float(s)
+        logger.debug("IS A FLOAT: %s" % s)
+        return True
+    except ValueError:
+        logger.debug("Value is not a FLOAT: %s" % s)
+        return False
+
+
+def is_time(s):
+    try:
+        # parse with two different default dates
+        d1 = datetime(2000, 01, 01, 12, 34, 56, 123456)
+        d2 = datetime(2007, 10, 20, 14, 32, 12, 654321)
+        v1 = parse(s, default=d1)
+        v2 = parse(s, default=d2)
+
+        # if the year/month/day end up matching both default dates, then we got time only
+        if d1.timetuple()[:3] == v1.timetuple()[:3] and d2.timetuple()[:3] == v2.timetuple()[:3]:
             return True
-        except ValueError:
-            return False
+    except:
+        pass
 
-    def is_float(self, s):
-        try:
-            float(s)
+    logger.debug("Value is not a TIME: %s" % s)
+    return False
+
+
+def is_date(s):
+    try:
+        # parse with two different default dates
+        d1 = datetime(2000, 01, 01, 12, 34, 56)
+        d2 = datetime(2007, 10, 20, 14, 32, 12)
+        v1 = parse(s, default=d1)
+        v2 = parse(s, default=d2)
+
+        # if the hour, minute, second, microseconds end up matching both default dates, then we got date only
+        if d1.timetuple()[3:6] == v1.timetuple()[3:6] and d2.timetuple()[3:6] == v2.timetuple()[3:6]:
             return True
-        except ValueError:
-            return False
+    except:
+        pass
 
-    def is_date(self, s):
-        isdate = False
-        try:
-            time.strptime(s, "%m/%d/%y")
-            isdate = True
-        except ValueError:
-            pass
-            
-        try:
-            time.strptime(s, "%Y-%m-%d")
-            isdate = True
-        except ValueError:
-            pass
-        
-        return isdate
-        
+    logger.debug("Value is not a DATE: %s" % s)
+    return False
+
+
+def is_datetime(s):
+    try:
+        # parse with two different default dates
+        d1 = datetime(2000, 01, 01, 12, 34, 56, 123456)
+        d2 = datetime(2007, 10, 20, 14, 32, 12, 654321)
+        v1 = parse(s, default=d1)
+        v2 = parse(s, default=d2)
+
+        # if if doesn't match either, then we've got a date time
+        if d1 != v1 and d2 != v2:
+            logger.debug("IS A DATETIME: %s" % s)
+            return True
+    except:
+        pass
+
+    logger.debug("Value is not a DATETIME: %s" % s)
+    return False

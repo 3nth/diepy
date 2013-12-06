@@ -1,2 +1,5 @@
-int,float,datetime,string
-1,2.83,2013-10-11,hello
+bool,int,float,date,time,datetime,string
+0,1,2.83,2013-10-11,12:01:02,2013-10-11 13:04:05,hello
+1,2,4.2435,2013-12-05,,2000-12-12 14:23:45.1325,"tricky with the spaces and the, commas"
+,3,135.134,,,,"return
+"
