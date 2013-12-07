@@ -316,6 +316,8 @@ def is_date(s):
         # if the hour, minute, second, microseconds end up matching both default dates, then we got date only
         if d1.timetuple()[3:6] == v1.timetuple()[3:6] and d2.timetuple()[3:6] == v2.timetuple()[3:6]:
             return True
+        if parse(s).timetuple()[3:6] == (0, 0, 0):
+            return True
     except:
         pass
 
