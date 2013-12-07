@@ -27,7 +27,7 @@ class Database(object):
         if database:
             cstring = cstring.rstrip('/') + '/' + database
 
-        logger.info('Connecting to database...')
+        logger.info('Connecting to database: %s' % cstring)
         self.engine = sqlalchemy.create_engine(cstring)
         self.metadata.bind = self.engine
 
@@ -138,16 +138,16 @@ def cast_data(k, v, table):
     if v is None or v == '':
         return None
 
-    logger.info('Attempting to cast %s as %s ...' % (v, table.c[k].type))
+    logger.debug('Attempting to cast %s as %s ...' % (v, table.c[k].type))
     if isinstance(table.c[k].type, sqlalchemy.types.DATETIME) or isinstance(table.c[k].type, sqlalchemy.types.DATE):
-        logger.info('Attempting to cast %s as %s ...' % (v, table.c[k].type))
         v = parse(v)
-        logger.debug(v)
+
 
     if isinstance(table.c[k].type, sqlalchemy.types.TIME):
         dt = parse(v)
-        return dt.time()
+        v = dt.time()
 
+    logger.debug(v)
     return v
 
 
