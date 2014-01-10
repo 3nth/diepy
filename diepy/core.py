@@ -42,7 +42,7 @@ class Database(object):
             table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
 
             rows = self.store_data(filepath, table, delimiter)
-            logger.info("Stored %s records from %s in %s" % (rows, filepath, table.name))
+
         except:
             logger.exception("Had some trouble storing %s" % filepath)
 
@@ -73,19 +73,12 @@ class Database(object):
             batch.append(record)
             if rows % 100 == 0:
                 cn.execute(table.insert(), batch)
-                batch = []
-                print "\r%s records..." % rows,
-                sys.stdout.flush()
-
-        print "\r                             \r",
+                logger.info("Imported %s records..." % rows)
 
         if len(batch) > 0:
             cn.execute(table.insert(), batch)
 
-        if errors > 0:
-            raise Exception, "Had trouble storing %s in %s\n%i errors in %i records" % (
-                filepath, table.name, errors, rows)
-
+        logger.info("Stored %s records from %s in %s" % (rows, filepath, table.name))
         return rows
 
     def export_table(self, table, filename, schema=None, unix=False, zip=False):

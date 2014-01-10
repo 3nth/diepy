@@ -15,7 +15,7 @@ def import_files(server, database, schema, table, delimiter, import_paths):
         db.import_file(import_paths, table, schema, delimiter=delimiter)
         return
 
-    for inpath in import_paths:
+    for inpath in listdir(import_paths):
         logger.info("Importing: %s" % inpath)
         time.sleep(5)
         if path.isdir(inpath):
