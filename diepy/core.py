@@ -74,6 +74,7 @@ class Database(object):
             if rows % 100 == 0:
                 cn.execute(table.insert(), batch)
                 logger.info("Imported %s records..." % rows)
+                batch = []
 
         if len(batch) > 0:
             cn.execute(table.insert(), batch)

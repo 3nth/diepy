@@ -3,6 +3,8 @@ from .core import Database
 from os import path, listdir
 import time
 
+__version__ = '0.2'
+
 logger = logging.getLogger(__name__)
 handler = logging.NullHandler()
 logger.addHandler(handler)
