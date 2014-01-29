@@ -14,13 +14,23 @@ logger = logging.getLogger(__name__)
 
 
 class Database(object):
-    def __init__(self, server, database=None):
+    def __init__(self, server, database=None, config=None):
         self.metadata = sqlalchemy.MetaData()
         self.engine = None
 
-        logger.info('Parsing config file...')
         parser = SafeConfigParser()
-        parser.read('diepy.ini')
+
+        if config:
+            logger.info('Parsing config file %s' % config)
+            parser.read(config)
+        elif path.exists('diepy.ini'):
+            logger.info('Parsing config file %s' % path.abspath('diepy.ini'))
+            parser.read('diepy.ini')
+        elif path.exists(path.expanduser("~/diepy.ini")):
+            logger.info('Parsing config file %s' % path.abspath(path.expanduser('~/diepy.ini')))
+            parser.read('diepy.ini')
+        else:
+            raise Exception("No configuration file found!")
 
         cstring = parser.get('servers', server)
 

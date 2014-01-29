@@ -9,9 +9,9 @@ logger = logging.getLogger(__name__)
 handler = logging.NullHandler()
 logger.addHandler(handler)
 
-def import_files(server, database, schema, table, delimiter, import_paths):
+def import_files(server, database, schema, table, delimiter, import_paths, config):
 
-    db = Database(server, database)
+    db = Database(server, database, config)
 
     if path.isfile(import_paths):
         db.import_file(import_paths, table, schema, delimiter=delimiter)

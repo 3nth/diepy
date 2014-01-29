@@ -17,6 +17,7 @@ def run():
     parser.add_argument("-c", "--schema", dest="schema", help="Schema name")
     parser.add_argument("-t", "--table", dest="table", help="Table name")
     parser.add_argument("--tab", dest="tab", action="store_true", default=False, help="Delimiter")
+    parser.add_argument("--config", dest="config", help="A path to a specific config file to use")
     parser.add_argument("files", action="store")
 
     options = parser.parse_args()
@@ -32,7 +33,8 @@ def run():
                           options.schema,
                           options.table,
                           delimiter,
-                          options.files)
+                          options.files,
+                          options.config)
 
     elif options.command == 'export':
         export_table(options.server,

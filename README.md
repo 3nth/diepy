@@ -6,6 +6,15 @@ a stinky wrapper for you database needs
 
 #### connection strings
 
+these are specified in a configuration file. Configuration file found/used in this order:
+1. --config argument. If passed, this is the only file attempted.
+2. A "diepy.ini" file in the cwd
+3. A "diepy.ini" file in the users home folder.
+
+The configuration file has a single section, servers, which has a key = connection string listing of servers. The -s argument corresponds to a key here. The connection strings are used by SqlAlchemy so refer to their doc on how to write one.
+
+If database (-d) is passed then it's appended to the connection string "cstring/database"
+
 ## diepy does
 
 #### import
