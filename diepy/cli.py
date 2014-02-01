@@ -1,4 +1,8 @@
+import argparse
+import datetime
 import logging
+import os
+from os import path
 import sys
 
 from cliff.app import App
@@ -6,7 +10,7 @@ from cliff.command import Command
 from cliff.commandmanager import CommandManager
 
 import diepy
-from .core import import_files, export_table
+from .core import Database, import_files
 
 class DiepyApp(App):
     
@@ -22,11 +26,10 @@ class DiepyApp(App):
     def build_option_parser(self, description, version, argparse_kwargs=None):
         parser = super(DiepyApp, self).build_option_parser(description, version, argparse_kwargs)
         parser.add_argument('--config', action='store', default=None, help='Path to config file.')
-        parser.add_argument("-s", "--server", dest="server", help="Database Server to connect to")
-        parser.add_argument("-d", "--database", dest="database", help="Database to connect to.")
-        parser.add_argument("-c", "--schema", dest="schema", help="Schema name")
-        parser.add_argument("-t", "--table", dest="table", help="Table name")
-        parser.add_argument("--tab", dest="tab", action="store_true", default=False, help="Delimiter")
+        parser.add_argument('-s', '--server', dest='server', help='Database Server to connect to')
+        parser.add_argument('-d', '--database', dest='database', help='Database to connect to.')
+        parser.add_argument('--tab', dest='tab', action='store_true', default=False, help='Delimiter')
+        
         return parser
         
     def initialize_app(self, argv):
@@ -46,17 +49,72 @@ class Export(Command):
     
     log = logging.getLogger(__name__)
     
+    def get_parser(self, prog_name):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--unix', action='store_true', help='Use unix line endings')
+        parser.add_argument('--datestamp', action='store_true', help='add a datestamp to the filename')
+        parser.add_argument('--timestamp', action='store_true', help='add a datestamp and timestamp to the filename.')
+        parser.add_argument('--zip', action='store_true', help='zip/gzip file')
+        parser.add_argument('table', action='store', help='Table name')
+        parser.add_argument('out', action='store', help='Export file')
+        return parser
+        
     def take_action(self, parsed_args):
-        if parsed_args.tab:
+        if self.app_args.tab:
             delimiter = '\t'
         else:
             delimiter = ','
         
-        export_table(options.server,
-                          options.database,
-                          options.schema,
-                          options.table,
-                          options.files[0])
+        server = self.app_args.server
+        database = self.app_args.database
+        schema = self.app_args.schema
+        
+        parts = parsed_args.table.split('.')
+
+        if len(parts) == 2:
+            schema = parts[0]
+            table = parts[1]
+        elif len(parts) == 3:
+            database = parts[0]
+            schema = parts[1]
+            table = parts[2]
+        elif len(parts) == 4:
+            server = parts[0]
+            database = parts[1]
+            schema = parts[2]
+            table = parts[3]
+            
+        out = parsed_args.out or os.getcwd()
+        
+        zip = parsed_args.zip or out.endswith('.gz')
+        
+        if out.endswith('.csv') or out.endswith('.gz'):
+            fname = path.basename(out)
+            fname = fname.replace('.csv', '').replace('.gz', '')
+            out = path.dirname(out)
+        else:
+            fname = table
+        
+        if parsed_args.datestamp or parsed_args.timestamp:
+            fname = '{}-{:%Y.%m.%d}'.format(fname, datetime.datetime.now())
+        
+        if parsed_args.timestamp:
+            fname = '{}.{:%H%M}'.format(fname, datetime.datetime.now())
+        
+        out = path.join(out, fname + '.csv')
+        
+        db = Database(
+                server, 
+                database,
+                self.app_args.config
+        )
+        db.export_table(
+            table,
+            out,
+            schema,
+            parsed_args.unix,
+            zip
+        )
 
 
 class Import(Command):
@@ -67,21 +125,48 @@ class Import(Command):
     def get_parser(self, prog_name):
         parser = argparse.ArgumentParser()
         parser.add_argument('files', action='store', help='File(s) to import')
+        parser.add_argument('table', action='store', help='Table name')
         return parser
         
     def take_action(self, parsed_args):
-        if parsed_args.tab:
+        if self.app_args.tab:
             delimiter = '\t'
         else:
             delimiter = ','
 
-        import_files(parsed_args.server,
-                          parsed_args.database,
-                          parsed_args.schema,
-                          parsed_args.table,
-                          delimiter,
-                          parsed_args.files,
-                          parsed_args.config)
+        server = self.app_args.server
+        database = self.app_args.database
+        schema = None
+        table = parsed_args.table
+        
+        print table
+        parts = table.split('.')
+
+        if len(parts) == 2:
+            schema = parts[0]
+            table = parts[1]
+        elif len(parts) == 3:
+            database = parts[0]
+            schema = parts[1]
+            table = parts[2]
+        elif len(parts) == 4:
+            server = parts[0]
+            database = parts[1]
+            schema = parts[2]
+            table = parts[3]
+        
+        if not server:
+            raise Exception("Need to specify server.")
+            
+        import_files(
+            server,
+            database,
+            schema or None,
+            table,
+            delimiter,
+            parsed_args.files,
+            self.app_args.config
+        )
 
 
 def main(argv=sys.argv[1:]):

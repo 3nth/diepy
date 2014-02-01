@@ -131,11 +131,14 @@ class Database(object):
         return rows
 
     def export_table(self, table, filename, schema=None, unix=False, zip=False):
-        mytable = sqlalchemy.Table(table, self.metadata, autoload=True, schema=schema)
+        mytable = sqlalchemy.Table(table, self.metadata, autoload=True, schema=schema or None)
         db_connection = self.engine.connect()
 
         select = sqlalchemy.sql.select([mytable])
         result = db_connection.execute(select)
+
+        
+            
 
         if zip:
             if not filename.endswith('.gz'):
@@ -228,7 +231,7 @@ class ColumnDef(object):
     """Defines the schema for a table column"""
 
     def __init__(self, name=''):
-        self.name = name
+        self.name = name or 'unnamed'
         self.nullable = False
         self.type = ''
         self.length = 0
