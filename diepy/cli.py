@@ -20,14 +20,13 @@ class DiepyApp(App):
         )
     
     def build_option_parser(self, description, version, argparse_kwargs=None):
-        parser = super(QualpyApp, self).build_option_parser(description, version, argparse_kwargs)
+        parser = super(DiepyApp, self).build_option_parser(description, version, argparse_kwargs)
         parser.add_argument('--config', action='store', default=None, help='Path to config file.')
         parser.add_argument("-s", "--server", dest="server", help="Database Server to connect to")
         parser.add_argument("-d", "--database", dest="database", help="Database to connect to.")
         parser.add_argument("-c", "--schema", dest="schema", help="Schema name")
         parser.add_argument("-t", "--table", dest="table", help="Table name")
         parser.add_argument("--tab", dest="tab", action="store_true", default=False, help="Delimiter")
-        parser.add_argument("files", action="store")
         return parser
         
     def initialize_app(self, argv):
@@ -65,6 +64,11 @@ class Import(Command):
     
     log = logging.getLogger(__name__)
     
+    def get_parser(self, prog_name):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('files', action='store', help='File(s) to import')
+        return parser
+        
     def take_action(self, parsed_args):
         if parsed_args.tab:
             delimiter = '\t'

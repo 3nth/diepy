@@ -18,12 +18,14 @@ config = {
     'url': 'https://github.com/3nth/diepy',
     'download_url': 'https://github.com/3nth/diepy',
     'packages': ['diepy'],
+    'package_dir': {'diepy': 'diepy'},
     'platforms': 'any',
     'tests_require': ['nose'],
     'install_requires': ['SQLAlchemy', 'python-dateutil', 'cliff'],
+    'scripts': [],
     'entry_points': {
         'console_scripts': [
-            'diepy = diepy.cli:run'
+            'diepy = diepy.cli:main'
         ],
         'diepy': [
             'import = diepy.cli:Import',
