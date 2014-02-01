@@ -10,10 +10,10 @@ handler = logging.NullHandler()
 logger.addHandler(handler)
 
 def import_files(server, database, schema, table, delimiter, import_paths, config):
-    """Import files into database.
+    """Import file(s) into database.
     
     Args:
-        server: the server to connect to. Should be in config file.
+        server (string): the server to connect to. Should be in config file.
         database: the database on the server to connect to.
         schema: the schema of the table.
         table: the name of the table
