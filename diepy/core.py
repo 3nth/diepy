@@ -124,7 +124,7 @@ class Database(object):
                 logger.info("Imported %s records..." % rows)
                 batch = []
 
-        if len(batch) > 0:
+        if batch:
             cn.execute(table.insert(), batch)
 
         logger.info("Stored %s records from %s in %s" % (rows, filepath, table.name))

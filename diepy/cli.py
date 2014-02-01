@@ -5,7 +5,8 @@ from cliff.app import App
 from cliff.command import Command
 from cliff.commandmanager import CommandManager
 
-from .core import diepy
+import diepy
+from .core import import_files, export_table
 
 class DiepyApp(App):
     
