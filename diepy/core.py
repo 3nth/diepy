@@ -66,7 +66,7 @@ class Database(object):
             parser.read('diepy.ini')
         elif path.exists(path.expanduser("~/diepy.ini")):
             logger.info('Parsing config file %s' % path.abspath(path.expanduser('~/diepy.ini')))
-            parser.read('diepy.ini')
+            parser.read(path.abspath(path.expanduser('~/diepy.ini')))
         else:
             raise Exception("No configuration file found!")
 
