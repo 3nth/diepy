@@ -41,6 +41,7 @@ config = {
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
+        'Topic :: Database',
         'Topic :: Software Development :: Libraries :: Python Modules',
         ]
 }
