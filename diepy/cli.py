@@ -104,7 +104,7 @@ class Export(Command):
         out = path.join(out, fname + '.csv')
         
         db = Database(
-                server, 
+                server,
                 database,
                 self.app_args.config
         )
@@ -142,18 +142,31 @@ class Import(Command):
         print table
         parts = table.split('.')
 
-        if len(parts) == 2:
-            schema = parts[0]
-            table = parts[1]
-        elif len(parts) == 3:
-            database = parts[0]
-            schema = parts[1]
-            table = parts[2]
-        elif len(parts) == 4:
-            server = parts[0]
-            database = parts[1]
-            schema = parts[2]
-            table = parts[3]
+
+        if path.isdir(parsed_args.files):
+            if len(parts) == 1:
+                schema = parts[0]
+            elif len(parts) == 2:
+                database = parts[0]
+                schema = parts[1]
+            elif len(parts) == 3:
+                server = parts[0]
+                database = parts[1]
+                schema = parts[2]
+
+        elif path.isfile(parsed_args.files):
+            if len(parts) == 2:
+                schema = parts[0]
+                table = parts[1]
+            elif len(parts) == 3:
+                database = parts[0]
+                schema = parts[1]
+                table = parts[2]
+            elif len(parts) == 4:
+                server = parts[0]
+                database = parts[1]
+                schema = parts[2]
+                table = parts[3]
         
         if not server:
             raise Exception("Need to specify server.")
