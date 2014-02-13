@@ -35,11 +35,11 @@ def import_files(server, database, schema, table, delimiter, import_paths, confi
         db.import_file(import_paths, table, schema, delimiter=delimiter)
         return
 
-    for inpath in listdir(import_paths):
+    for inpath in path.listdir(import_paths):
         logger.info("Importing: %s" % inpath)
         time.sleep(5)
         if path.isdir(inpath):
-            for name in listdir(inpath):
+            for name in path.listdir(inpath):
                 if not name.endswith('.csv'):
                     continue
                 print 'Importing: ' + name
