@@ -19,7 +19,7 @@ class DiepyApp(App):
     def __init__(self):
         super(DiepyApp, self).__init__(
             description='diepy',
-            version='0.3',
+            version=diepy.__version__,
             command_manager=CommandManager('diepy'),
         )
     
