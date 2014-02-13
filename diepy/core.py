@@ -112,7 +112,6 @@ class Database(object):
         cn = self.engine.connect()
         infile = open(filepath, 'rb')
         dr = csv.DictReader(infile, delimiter=delimiter)
-        errors = 0
         rows = 0
         batch = []
         for row in dr:
@@ -136,9 +135,6 @@ class Database(object):
 
         select = sqlalchemy.sql.select([mytable])
         result = db_connection.execute(select)
-
-        
-            
 
         if zip:
             if not filename.endswith('.gz'):
@@ -186,7 +182,6 @@ def cast_data(k, v, table):
     logger.debug('Attempting to cast %s as %s ...' % (v, table.c[k].type))
     if isinstance(table.c[k].type, sqlalchemy.types.DATETIME) or isinstance(table.c[k].type, sqlalchemy.types.DATE):
         v = parse(v)
-
 
     if isinstance(table.c[k].type, sqlalchemy.types.TIME):
         dt = parse(v)
