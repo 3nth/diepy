@@ -36,7 +36,7 @@ def import_files(import_path, server, database=None, schema=None, table=None, de
         db.import_file(import_path, table, schema, delimiter=delimiter)
         return
 
-    for fpath in [path.join(import_path, p) for p in os.listdir(import_paths)]:
+    for fpath in [path.join(import_path, p) for p in os.listdir(import_path)]:
         if not fpath.endswith('.csv'):
             continue
         logger.info("Importing: %s" % fpath)
