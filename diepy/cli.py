@@ -19,7 +19,7 @@ class DiepyApp(App):
     def __init__(self):
         super(DiepyApp, self).__init__(
             description='diepy',
-            version='0.3',
+            version=diepy.__version__,
             command_manager=CommandManager('diepy'),
         )
     
@@ -104,7 +104,7 @@ class Export(Command):
         out = path.join(out, fname + '.csv')
         
         db = Database(
-                server, 
+                server,
                 database,
                 self.app_args.config
         )
@@ -125,7 +125,7 @@ class Import(Command):
     def get_parser(self, prog_name):
         parser = argparse.ArgumentParser()
         parser.add_argument('files', action='store', help='File(s) to import')
-        parser.add_argument('table', action='store', help='Table name')
+        parser.add_argument('dst', action='store', help='Table name')
         return parser
         
     def take_action(self, parsed_args):
@@ -137,34 +137,43 @@ class Import(Command):
         server = self.app_args.server
         database = self.app_args.database
         schema = None
-        table = parsed_args.table
+        table = None
         
-        print table
-        parts = table.split('.')
+        parts = parsed_args.dst.split('.')
 
-        if len(parts) == 2:
-            schema = parts[0]
-            table = parts[1]
+
+        if len(parts) == 1:
+            server = parts[0]
+        elif len(parts) == 2:
+            server = parts[0]
+            database = parts[1]
         elif len(parts) == 3:
-            database = parts[0]
-            schema = parts[1]
-            table = parts[2]
+            server = parts[0]
+            database = parts[1]
+            schema = parts[2]
+        elif len(parts) == 3:
+            server = parts[0]
+            database = parts[1]
+            schema = parts[2]
         elif len(parts) == 4:
             server = parts[0]
             database = parts[1]
             schema = parts[2]
             table = parts[3]
+
+        if path.isdir(parsed_args.files) and table:
+            raise Exception("If importing a directory, don't specify the table name.")
         
         if not server:
             raise Exception("Need to specify server.")
             
         import_files(
+            parsed_args.files,
             server,
             database,
-            schema or None,
+            schema,
             table,
             delimiter,
-            parsed_args.files,
             self.app_args.config
         )
 

@@ -3,6 +3,7 @@ from ConfigParser import SafeConfigParser
 from datetime import datetime
 import gzip
 import logging
+import os
 from os import path
 import sys
 import time
@@ -13,7 +14,7 @@ import sqlalchemy
 logger = logging.getLogger(__name__)
 
 
-def import_files(server, database, schema, table, delimiter, import_paths, config):
+def import_files(import_path, server, database=None, schema=None, table=None, delimiter=None, config=None):
     """Import file(s) into database.
     
     Args:
@@ -31,19 +32,15 @@ def import_files(server, database, schema, table, delimiter, import_paths, confi
     """
     db = Database(server, database, config)
 
-    if path.isfile(import_paths):
-        db.import_file(import_paths, table, schema, delimiter=delimiter)
+    if path.isfile(import_path):
+        db.import_file(import_path, table, schema, delimiter=delimiter)
         return
 
-    for inpath in listdir(import_paths):
-        logger.info("Importing: %s" % inpath)
-        time.sleep(5)
-        if path.isdir(inpath):
-            for name in listdir(inpath):
-                if not name.endswith('.csv'):
-                    continue
-                print 'Importing: ' + name
-                db.import_file(path.join(inpath, name), name, schema, delimiter=delimiter)
+    for fpath in [path.join(import_path, p) for p in os.listdir(import_paths)]:
+        if not fpath.endswith('.csv'):
+            continue
+        logger.info("Importing: %s" % fpath)
+        db.import_file(fpath, None, schema, delimiter=delimiter)
 
 
 def export_table(server, database, schema, table, export_path):
@@ -109,10 +106,10 @@ class Database(object):
         table.create(self.engine)
 
     def store_data(self, filepath, table, delimiter=','):
+        logger.info("Storing records from %s in %s" % (filepath, table.name))
         cn = self.engine.connect()
         infile = open(filepath, 'rb')
         dr = csv.DictReader(infile, delimiter=delimiter)
-        errors = 0
         rows = 0
         batch = []
         for row in dr:
@@ -136,9 +133,6 @@ class Database(object):
 
         select = sqlalchemy.sql.select([mytable])
         result = db_connection.execute(select)
-
-        
-            
 
         if zip:
             if not filename.endswith('.gz'):
@@ -186,7 +180,6 @@ def cast_data(k, v, table):
     logger.debug('Attempting to cast %s as %s ...' % (v, table.c[k].type))
     if isinstance(table.c[k].type, sqlalchemy.types.DATETIME) or isinstance(table.c[k].type, sqlalchemy.types.DATE):
         v = parse(v)
-
 
     if isinstance(table.c[k].type, sqlalchemy.types.TIME):
         dt = parse(v)
