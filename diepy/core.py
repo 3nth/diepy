@@ -148,15 +148,20 @@ class Database(object):
         else:
             f = open(filename, 'wb')
 
+        if unix:
+            lineterminator = '\n'
+        elif windows:
+            lineterminator = '\r\n'
+        else:
+            lineterminator = os.linesep
+
+        if filename.endswith('.tab') or filename.endswith('.tsv'):
+            delimiter = '\t'
+        else:
+            delimiter = ','
+
         try:
-            if unix:
-                lineterminator = '\n'
-            elif windows:
-                lineterminator = '\r\n'
-            else:
-                lineterminator = os.linesep
-                
-            writer = csv.writer(f, lineterminator=lineterminator)
+            writer = csv.writer(f, lineterminator=lineterminator, delimiter=delimiter)
             writer.writerow(data.keys())
             records = 0
             for row in data:
