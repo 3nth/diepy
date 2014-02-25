@@ -39,3 +39,8 @@ def test_basic_export():
     db = core.Database('test')
     db.export_table('basic', datafile)
 
+
+def test_basic_export_xlsx():
+    datafile = 'export.xlsx'
+    db = core.Database('test')
+    db.export_table('basic', datafile)

@@ -9,6 +9,7 @@ import sys
 import time
 
 from dateutil.parser import parse
+import openpyxl
 import sqlalchemy
 
 logger = logging.getLogger(__name__)
@@ -132,8 +133,14 @@ class Database(object):
         db_connection = self.engine.connect()
 
         select = sqlalchemy.sql.select([mytable])
-        result = db_connection.execute(select)
+        results = db_connection.execute(select)
 
+        if filename.endswith('.xlsx'):
+            self.write_xlsx(filename, table, results)
+        else:
+            self.write_csv(filename, results, unix, zip)
+
+    def write_csv(self, filename, data, unix=False, windows=False, zip=False):
         if zip:
             if not filename.endswith('.gz'):
                 filename += '.gz'
@@ -144,19 +151,43 @@ class Database(object):
         try:
             if unix:
                 lineterminator = '\n'
-            else:
+            elif windows:
                 lineterminator = '\r\n'
-
+            else:
+                lineterminator = os.linesep
+                
             writer = csv.writer(f, lineterminator=lineterminator)
-            writer.writerow(result.keys())
+            writer.writerow(data.keys())
             records = 0
-            for row in result:
+            for row in data:
                 cleaned = [self._cleanbool(x) for x in row]
                 writer.writerow(row)
                 records += 1
 
         finally:
             f.close()
+
+    def write_xlsx(self, filename, tablename, data):
+        if path.isfile(filename):
+            wb = openpyxl.load_workbook(filename)
+            ws = wb.get_sheet_by_name(tablename)
+            if ws:
+                wb.remove_sheet(ws)
+            ws = wb.create_sheet()
+        else:
+            wb = openpyxl.Workbook()
+            ws = wb.active
+        
+        ws.title = tablename
+        
+        for c, title in enumerate(data.keys()):
+            ws.cell(row=0, column=c).value = title
+        
+        for r, row in enumerate(data):
+            for c, value in enumerate(row):
+                ws.cell(row=r+1, column=c).value = value
+        
+        wb.save(filename=filename)
 
     @staticmethod
     def _cleanbool(value):
