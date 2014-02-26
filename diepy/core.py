@@ -162,16 +162,24 @@ class Database(object):
             delimiter = ','
 
         try:
-            writer = csv.writer(f, lineterminator=lineterminator, delimiter=delimiter)
-            writer.writerow(data.keys())
+            fieldnames = data.keys()
+            writer = csv.DictWriter(f,
+                lineterminator=lineterminator,
+                delimiter=delimiter,
+                fieldnames=fieldnames
+            )
+            headers = dict( (n,n) for n in fieldnames )
+            writer.writerow(headers)
             records = 0
             for row in data:
-                cleaned = [self._cleanbool(x) for x in row]
-                writer.writerow(row)
+                cleaned = {k: self._cleanbool(v) for k, v in row.items()}
+                writer.writerow(cleaned)
                 records += 1
 
         finally:
             f.close()
+
+        logger.info("Wrote %s records to %s" % (records, filename))
 
     def write_xlsx(self, filename, tablename, data):
         if path.isfile(filename):
