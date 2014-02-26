@@ -166,7 +166,7 @@ class Database(object):
             rows += 1
             record = {k: cast_data(k, v, table) for k, v in row.items()}
             batch.append(record)
-            if rows % 100 == 0:
+            if rows % 1000 == 0:
                 cn.execute(table.insert(), batch)
                 logger.info("Imported %s records..." % rows)
                 batch = []
@@ -269,7 +269,7 @@ def cast_data(k, v, table):
     if v is None or v == '':
         return None
 
-    logger.debug('Attempting to cast %s as %s ...' % (v, table.c[k].type))
+    #logger.debug('Attempting to cast %s as %s ...' % (v, table.c[k].type))
     if isinstance(table.c[k].type, sqlalchemy.types.DATETIME) or isinstance(table.c[k].type, sqlalchemy.types.DATE):
         v = parse(v)
 
@@ -277,7 +277,7 @@ def cast_data(k, v, table):
         dt = parse(v)
         v = dt.time()
 
-    logger.debug(v)
+    #logger.debug(v)
     return v
 
 
