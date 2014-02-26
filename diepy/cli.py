@@ -26,8 +26,6 @@ class DiepyApp(App):
     def build_option_parser(self, description, version, argparse_kwargs=None):
         parser = super(DiepyApp, self).build_option_parser(description, version, argparse_kwargs)
         parser.add_argument('--config', action='store', default=None, help='Path to config file.')
-        parser.add_argument('-s', '--server', dest='server', help='Database Server to connect to')
-        parser.add_argument('-d', '--database', dest='database', help='Database to connect to.')
         parser.add_argument('--tab', dest='tab', action='store_true', default=False, help='Delimiter')
         
         return parser
