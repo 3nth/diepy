@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import glob
 import logging
 import os
 from os import path
@@ -130,17 +131,17 @@ class Import(Command):
 
             if path.isfile(src):
                 db.import_file(src, table, schema, delimiter=delimiter, truncate=parsed_args.truncate)
-            elif path.isdir(parse_args.src):
+            elif path.isdir(src):
                 for fpath in [path.join(src, p) for p in os.listdir(src)]:
                     if not fpath.endswith('.csv'):
                         continue
                     db.import_file(fpath, None, schema, delimiter=delimiter, truncate=parsed_args.truncate)
             else:
-                raise Exception('Cannot import %s' % src)
-                # for fpath in glob.glob(src):
-#                     if not fpath.endswith('.csv'):
-#                         continue
-#                     db.import_file(fpath, None, schema, delimiter=delimiter)
+                for fpath in glob.glob(src):
+                    if not fpath.endswith('.csv'):
+                        continue
+                    print fpath
+                    db.import_file(fpath, None, schema, delimiter=delimiter)
 
 
 
