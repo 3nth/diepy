@@ -1,18 +1,43 @@
 import csv
+from collections import OrderedDict
 from ConfigParser import SafeConfigParser
 from datetime import datetime
 import gzip
 import logging
 import os
 from os import path
-import sys
-import time
 
 from dateutil.parser import parse
+import openpyxl
 import sqlalchemy
 
 logger = logging.getLogger(__name__)
 
+
+def parse_dbpath(dbpath):
+    parts = dbpath.split('.')
+
+    server = None
+    database = None
+    schema = None
+    table = None
+
+    if len(parts) == 1:
+        server = parts[0]
+    elif len(parts) == 2:
+        server = parts[0]
+        database = parts[1]
+    elif len(parts) == 3:
+        server = parts[0]
+        database = parts[1] or None
+        schema = parts[2]
+    elif len(parts) == 4:
+        server = parts[0]
+        database = parts[1] or None
+        schema = parts[2] or None
+        table = parts[3]
+
+    return server, database, schema, table
 
 def import_files(import_path, server, database=None, schema=None, table=None, delimiter=None, config=None):
     """Import file(s) into database.
@@ -27,7 +52,7 @@ def import_files(import_path, server, database=None, schema=None, table=None, de
         config: path to a specific configuration file to use.
     
     Returns:
-        nothing
+        None
     
     """
     db = Database(server, database, config)
@@ -77,6 +102,19 @@ class Database(object):
         self.metadata.bind = self.engine
 
     def import_file(self, filepath, table_name=None, schema=None, delimiter=','):
+        """Import a file into the database.
+
+        Args:
+            filepath (str): the path to the file to import.
+            table_name (str): the particular table to import into. defaults to be based on the filename sans extension
+            schema (str): the particular schema to import into. defaults to database/user default
+            delimiter (char): the delimiter to use. default to comma (,)
+
+        Returns:
+            int: the number of rows imported
+
+        """
+
         try:
             if not table_name:
                 (table_name, ext) = path.splitext(path.basename(filepath))
@@ -87,11 +125,23 @@ class Database(object):
             table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
 
             rows = self.store_data(filepath, table, delimiter)
+            return rows
 
         except:
             logger.exception("Had some trouble storing %s" % filepath)
 
     def table_exists(self, table_name, schema=None):
+        """Determines if a table already exists in the database
+
+        Args:
+            table_name (str): the name of the table to check for
+            schema (str): optional - the schema to search in. defaults to database/user default schema.
+
+        Returns:
+            bool: whether or not the table exists
+
+        """
+
         exists = self.engine.dialect.has_table(self.engine.connect(), table_name, schema=schema)
         if not exists:
             logger.warn("Table '%s' does not exist." % table_name)
@@ -108,7 +158,7 @@ class Database(object):
     def store_data(self, filepath, table, delimiter=','):
         logger.info("Storing records from %s in %s" % (filepath, table.name))
         cn = self.engine.connect()
-        infile = open(filepath, 'rb')
+        infile = open(filepath, 'rbU')
         dr = csv.DictReader(infile, delimiter=delimiter)
         rows = 0
         batch = []
@@ -116,7 +166,7 @@ class Database(object):
             rows += 1
             record = {k: cast_data(k, v, table) for k, v in row.items()}
             batch.append(record)
-            if rows % 100 == 0:
+            if rows % 1000 == 0:
                 cn.execute(table.insert(), batch)
                 logger.info("Imported %s records..." % rows)
                 batch = []
@@ -132,8 +182,14 @@ class Database(object):
         db_connection = self.engine.connect()
 
         select = sqlalchemy.sql.select([mytable])
-        result = db_connection.execute(select)
+        results = db_connection.execute(select)
 
+        if filename.endswith('.xlsx'):
+            self.write_xlsx(filename, table, results)
+        else:
+            self.write_csv(filename, results, unix, zip)
+
+    def write_csv(self, filename, data, unix=False, windows=False, zip=False):
         if zip:
             if not filename.endswith('.gz'):
                 filename += '.gz'
@@ -141,22 +197,58 @@ class Database(object):
         else:
             f = open(filename, 'wb')
 
-        try:
-            if unix:
-                lineterminator = '\n'
-            else:
-                lineterminator = '\r\n'
+        if unix:
+            lineterminator = '\n'
+        elif windows:
+            lineterminator = '\r\n'
+        else:
+            lineterminator = os.linesep
 
-            writer = csv.writer(f, lineterminator=lineterminator)
-            writer.writerow(result.keys())
+        if filename.endswith('.tab') or filename.endswith('.tsv'):
+            delimiter = '\t'
+        else:
+            delimiter = ','
+
+        try:
+            fieldnames = data.keys()
+            writer = csv.DictWriter(f,
+                    lineterminator=lineterminator,
+                    delimiter=delimiter,
+                    fieldnames=fieldnames)
+            headers = dict((n, n) for n in fieldnames)
+            writer.writerow(headers)
             records = 0
-            for row in result:
-                cleaned = [self._cleanbool(x) for x in row]
-                writer.writerow(row)
+            for row in data:
+                cleaned = {k: self._cleanbool(v) for k, v in row.items()}
+                writer.writerow(cleaned)
                 records += 1
 
         finally:
             f.close()
+
+        logger.info("Wrote %s records to %s" % (records, filename))
+
+    def write_xlsx(self, filename, tablename, data):
+        if path.isfile(filename):
+            wb = openpyxl.load_workbook(filename)
+            ws = wb.get_sheet_by_name(tablename)
+            if ws:
+                wb.remove_sheet(ws)
+            ws = wb.create_sheet()
+        else:
+            wb = openpyxl.Workbook()
+            ws = wb.active
+        
+        ws.title = tablename
+        
+        for c, title in enumerate(data.keys()):
+            ws.cell(row=0, column=c).value = title
+        
+        for r, row in enumerate(data):
+            for c, value in enumerate(row):
+                ws.cell(row=r + 1, column=c).value = value
+        
+        wb.save(filename=filename)
 
     @staticmethod
     def _cleanbool(value):
@@ -177,7 +269,7 @@ def cast_data(k, v, table):
     if v is None or v == '':
         return None
 
-    logger.debug('Attempting to cast %s as %s ...' % (v, table.c[k].type))
+    #logger.debug('Attempting to cast %s as %s ...' % (v, table.c[k].type))
     if isinstance(table.c[k].type, sqlalchemy.types.DATETIME) or isinstance(table.c[k].type, sqlalchemy.types.DATE):
         v = parse(v)
 
@@ -185,7 +277,7 @@ def cast_data(k, v, table):
         dt = parse(v)
         v = dt.time()
 
-    logger.debug(v)
+    #logger.debug(v)
     return v
 
 
@@ -207,10 +299,10 @@ def cast_datetime(v):
 def generate_schema(filepath, delimiter=','):
     """Generates a table DDL statement based on the file"""
     logger.info("Generating schema for '%s'" % filepath)
-    infile = open(filepath, 'rb')
+    infile = open(filepath, 'rbU')
     dr = csv.DictReader(infile, delimiter=delimiter)
 
-    columns = {}
+    columns = OrderedDict()
     for row in dr:
         for field in dr.fieldnames:
             if not field in columns:
@@ -277,7 +369,9 @@ class ColumnDef(object):
         if self.type == '':
             self.type = 'text'
 
-        if self.type == 'int' and self.max_value > 32768:
+        if self.type == 'int' and self.max_value == 1 and self.min_value == 0:
+            return sqlalchemy.Column(self.name, sqlalchemy.types.BOOLEAN, nullable=self.nullable)
+        elif self.type == 'int' and self.max_value > 32768:
             return sqlalchemy.Column(self.name, sqlalchemy.types.INT, nullable=self.nullable)
         elif self.type == 'int':
             return sqlalchemy.Column(self.name, sqlalchemy.types.SMALLINT, nullable=self.nullable)

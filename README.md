@@ -17,29 +17,53 @@ If database (-d) is passed then it's appended to the connection string "cstring/
 
 ## diepy does
 
+#### db table references
+SERVER.DATABASE.SCHEMA.TABLE
+
+SERVER is always required. it's the used to look up the connection string in the config file.
+DATABASE is optional. will use default database (which can be configured via the connection string).
+SCHEMA is optional. Will use default schema.
+TABLE is required for exports. If not specified for import, the filename is used. TABLE cannot be used when importing a directory of files. In that case, the filename is used.
+
+If you want to leave out an adjoining element, you can do this:
+SERVER...TABLE
+
 #### import
 
 import a csv file
 
-	diepy import -s SERVER -d DATABASE -c SCHEMA -t TABLE path/to/some/file.csv
+	diepy import SERVER.DATABASE.SCHEMA.TABLE path/to/some/file.csv
 
 or a tab delimited file
 
-	diepy import -s SERVER -d DATABASE -c SCHEMA -t TABLE --tab path/to/some/file.csv
+	diepy import SERVER.DATABASE.SCHEMA.TABLE --tab path/to/some/file.csv
 
 or a whole directory of files
 
-	diepy import -s SERVER -d DATABASE -c SCHEMA -t TABLE path/to/some/files/
+	diepy import path/to/some/files/ SERVER.DATABASE.SCHEMA 
 
 let diepy create a table named the same as the file
 
-	diepy import -s SERVER -d DATABASE -c SCHEMA path/to/some/file.csv
+	diepy import path/to/some/file.csv SERVER.DATABASE.SCHEMA 
 
 #### export
 
 export a table to a csv file
 
-	diepy export -s SERVER -d DATABASE -c SCHEMA -t TABLE path/to/some/file.csv
+	diepy export SERVER.DATABASE.SCHEMA.TABLE path/to/some/file.csv
 
+export a table to a tab delimited file
 
+	diepy export SERVER.DATABASE.SCHEMA.TABLE path/to/some/file.tsv
+    diepy export SERVER.DATABASE.SCHEMA.TABLE path/to/some/file.tab
+
+export a table to a gzip'd csv file
+
+	diepy export SERVER.DATABASE.SCHEMA.TABLE path/to/some/file.csv.gz
+
+export to an xlsx file
+
+    diepy export SERVER.DATABASE.SCHEMA.TABLE path/to/some/file.xlsx
+
+xlsx exports will name the sheets using the table name.
 
