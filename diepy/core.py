@@ -158,7 +158,7 @@ class Database(object):
     def store_data(self, filepath, table, delimiter=','):
         logger.info("Storing records from %s in %s" % (filepath, table.name))
         cn = self.engine.connect()
-        infile = open(filepath, 'rb')
+        infile = open(filepath, 'rbU')
         dr = csv.DictReader(infile, delimiter=delimiter)
         rows = 0
         batch = []
@@ -299,7 +299,7 @@ def cast_datetime(v):
 def generate_schema(filepath, delimiter=','):
     """Generates a table DDL statement based on the file"""
     logger.info("Generating schema for '%s'" % filepath)
-    infile = open(filepath, 'rb')
+    infile = open(filepath, 'rbU')
     dr = csv.DictReader(infile, delimiter=delimiter)
 
     columns = OrderedDict()

@@ -50,11 +50,11 @@ class Export(Command):
     def get_parser(self, prog_name):
         parser = argparse.ArgumentParser()
         parser.add_argument('--unix', action='store_true', help='Use unix line endings')
-        parser.add_argument('--datestamp', action='store_true', help='add a datestamp to the filename')
-        parser.add_argument('--timestamp', action='store_true', help='add a datestamp and timestamp to the filename.')
-        parser.add_argument('--zip', action='store_true', help='zip/gzip file')
-        parser.add_argument('src', action='store', help='Table name')
-        parser.add_argument('out', action='store', help='Export file')
+        parser.add_argument('--datestamp', action='store_true', help='add a datestamp to the filename (ex: -2014.02.24)')
+        parser.add_argument('--timestamp', action='store_true', help='add a datestamp and timestamp to the filename. (ex: -2014.02.24.1345)')
+        parser.add_argument('--zip', action='store_true', help='gzip file. You can also add the .gz extension to the dst path to get compression.')
+        parser.add_argument('src', action='store', help='Table to export (ie. SERVER.DATABASE.SCHEMA.TABLE)')
+        parser.add_argument('dst', action='store', help='Where to export. Defaults to working directory.')
         return parser
         
     def take_action(self, parsed_args):
@@ -65,7 +65,7 @@ class Export(Command):
         
         server, database, schema, table = parse_dbpath(parsed_args.src)
             
-        out = parsed_args.out or os.getcwd()
+        out = parsed_args.dst or os.getcwd()
         
         zip = parsed_args.zip or out.endswith('.gz')
         
@@ -105,7 +105,7 @@ class Import(Command):
     
     def get_parser(self, prog_name):
         parser = argparse.ArgumentParser()
-        parser.add_argument('src', action='store', help='File(s) to import')
+        parser.add_argument('src', action='store', nargs='+', help='File(s) to import')
         parser.add_argument('dst', action='store', help='Table name')
         return parser
         
@@ -117,22 +117,30 @@ class Import(Command):
 
         server, database, schema, table = parse_dbpath(parsed_args.dst)
         
-        if path.isdir(parsed_args.src) and table:
-            raise Exception("If importing a directory, don't specify the table name.")
-        
         if not server:
             raise Exception("Need to specify server.")
 
         self.log.info("Importing...\nFile: {}\nServer: {}\nDatabase: {}\nSchema: {}\nTable: {}".format(parsed_args.src, server, database, schema, table))
-        import_files(
-            parsed_args.src,
-            server,
-            database,
-            schema,
-            table,
-            delimiter,
-            self.app_args.config
-        )
+        db = Database(server, database, self.app_args.config)
+
+        for src in parsed_args.src:
+            if path.isdir(src) and table:
+                raise Exception("If importing a directory, don't specify the table name.")
+
+            if path.isfile(src):
+                db.import_file(src, table, schema, delimiter=delimiter)
+            elif path.isdir(parse_args.src):
+                for fpath in [path.join(src, p) for p in os.listdir(src)]:
+                    if not fpath.endswith('.csv'):
+                        continue
+                    db.import_file(fpath, None, schema, delimiter=delimiter)
+            else:
+                raise Exception('Cannot import %s' % src)
+                # for fpath in glob.glob(src):
+#                     if not fpath.endswith('.csv'):
+#                         continue
+#                     db.import_file(fpath, None, schema, delimiter=delimiter)
+
 
 
 def main(argv=sys.argv[1:]):
