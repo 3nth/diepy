@@ -6,8 +6,6 @@ import gzip
 import logging
 import os
 from os import path
-import sys
-import time
 
 from dateutil.parser import parse
 import openpyxl
@@ -29,7 +27,7 @@ def import_files(import_path, server, database=None, schema=None, table=None, de
         config: path to a specific configuration file to use.
     
     Returns:
-        nothing
+        None
     
     """
     db = Database(server, database, config)
@@ -79,6 +77,19 @@ class Database(object):
         self.metadata.bind = self.engine
 
     def import_file(self, filepath, table_name=None, schema=None, delimiter=','):
+        """Import a file into the database.
+
+        Args:
+            filepath (str): the path to the file to import.
+            table_name (str): the particular table to import into. defaults to be based on the filename sans extension
+            schema (str): the particular schema to import into. defaults to database/user default
+            delimiter (char): the delimiter to use. default to comma (,)
+
+        Returns:
+            int: the number of rows imported
+
+        """
+
         try:
             if not table_name:
                 (table_name, ext) = path.splitext(path.basename(filepath))
@@ -89,11 +100,23 @@ class Database(object):
             table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
 
             rows = self.store_data(filepath, table, delimiter)
+            return rows
 
         except:
             logger.exception("Had some trouble storing %s" % filepath)
 
     def table_exists(self, table_name, schema=None):
+        """Determines if a table already exists in the database
+
+        Args:
+            table_name (str): the name of the table to check for
+            schema (str): optional - the schema to search in. defaults to database/user default schema.
+
+        Returns:
+            bool: whether or not the table exists
+
+        """
+
         exists = self.engine.dialect.has_table(self.engine.connect(), table_name, schema=schema)
         if not exists:
             logger.warn("Table '%s' does not exist." % table_name)
@@ -164,11 +187,10 @@ class Database(object):
         try:
             fieldnames = data.keys()
             writer = csv.DictWriter(f,
-                lineterminator=lineterminator,
-                delimiter=delimiter,
-                fieldnames=fieldnames
-            )
-            headers = dict( (n,n) for n in fieldnames )
+                    lineterminator=lineterminator,
+                    delimiter=delimiter,
+                    fieldnames=fieldnames)
+            headers = dict((n, n) for n in fieldnames)
             writer.writerow(headers)
             records = 0
             for row in data:
@@ -199,7 +221,7 @@ class Database(object):
         
         for r, row in enumerate(data):
             for c, value in enumerate(row):
-                ws.cell(row=r+1, column=c).value = value
+                ws.cell(row=r + 1, column=c).value = value
         
         wb.save(filename=filename)
 
