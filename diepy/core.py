@@ -1,4 +1,5 @@
 import csv
+from collections import OrderedDict
 from ConfigParser import SafeConfigParser
 from datetime import datetime
 import gzip
@@ -246,7 +247,7 @@ def generate_schema(filepath, delimiter=','):
     infile = open(filepath, 'rb')
     dr = csv.DictReader(infile, delimiter=delimiter)
 
-    columns = {}
+    columns = OrderedDict()
     for row in dr:
         for field in dr.fieldnames:
             if not field in columns:
