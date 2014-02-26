@@ -105,6 +105,7 @@ class Import(Command):
     
     def get_parser(self, prog_name):
         parser = argparse.ArgumentParser()
+        parser.add_argument('--truncate', action='store_true', help='delete existing records from dst table before importing. default is to append records.')
         parser.add_argument('src', action='store', nargs='+', help='File(s) to import')
         parser.add_argument('dst', action='store', help='Table name')
         return parser
@@ -128,12 +129,12 @@ class Import(Command):
                 raise Exception("If importing a directory, don't specify the table name.")
 
             if path.isfile(src):
-                db.import_file(src, table, schema, delimiter=delimiter)
+                db.import_file(src, table, schema, delimiter=delimiter, truncate=parsed_args.truncate)
             elif path.isdir(parse_args.src):
                 for fpath in [path.join(src, p) for p in os.listdir(src)]:
                     if not fpath.endswith('.csv'):
                         continue
-                    db.import_file(fpath, None, schema, delimiter=delimiter)
+                    db.import_file(fpath, None, schema, delimiter=delimiter, truncate=parsed_args.truncate)
             else:
                 raise Exception('Cannot import %s' % src)
                 # for fpath in glob.glob(src):

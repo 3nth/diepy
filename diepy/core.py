@@ -101,7 +101,7 @@ class Database(object):
         self.engine = sqlalchemy.create_engine(cstring)
         self.metadata.bind = self.engine
 
-    def import_file(self, filepath, table_name=None, schema=None, delimiter=','):
+    def import_file(self, filepath, table_name=None, schema=None, delimiter=',', truncate=False):
         """Import a file into the database.
 
         Args:
@@ -123,6 +123,8 @@ class Database(object):
                 self.create_table(table_name, filepath, delimiter, schema=schema)
 
             table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
+            if truncate:
+                self.engine.execute(table.delete())
 
             rows = self.store_data(filepath, table, delimiter)
             return rows
