@@ -14,6 +14,31 @@ import sqlalchemy
 logger = logging.getLogger(__name__)
 
 
+def parse_dbpath(dbpath):
+    parts = dbpath.split('.')
+
+    server = None
+    database = None
+    schema = None
+    table = None
+
+    if len(parts) == 1:
+        server = parts[0]
+    elif len(parts) == 2:
+        server = parts[0]
+        database = parts[1]
+    elif len(parts) == 3:
+        server = parts[0]
+        database = parts[1] or None
+        schema = parts[2]
+    elif len(parts) == 4:
+        server = parts[0]
+        database = parts[1] or None
+        schema = parts[2] or None
+        table = parts[3]
+
+    return server, database, schema, table
+
 def import_files(import_path, server, database=None, schema=None, table=None, delimiter=None, config=None):
     """Import file(s) into database.
     

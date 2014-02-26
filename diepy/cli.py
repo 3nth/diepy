@@ -10,7 +10,7 @@ from cliff.command import Command
 from cliff.commandmanager import CommandManager
 
 import diepy
-from .core import Database, import_files
+from .core import Database, import_files, parse_dbpath
 
 class DiepyApp(App):
     
@@ -55,7 +55,7 @@ class Export(Command):
         parser.add_argument('--datestamp', action='store_true', help='add a datestamp to the filename')
         parser.add_argument('--timestamp', action='store_true', help='add a datestamp and timestamp to the filename.')
         parser.add_argument('--zip', action='store_true', help='zip/gzip file')
-        parser.add_argument('table', action='store', help='Table name')
+        parser.add_argument('src', action='store', help='Table name')
         parser.add_argument('out', action='store', help='Export file')
         return parser
         
@@ -65,24 +65,7 @@ class Export(Command):
         else:
             delimiter = ','
         
-        server = self.app_args.server
-        database = self.app_args.database
-        schema = self.app_args.schema
-        
-        parts = parsed_args.table.split('.')
-
-        if len(parts) == 2:
-            schema = parts[0]
-            table = parts[1]
-        elif len(parts) == 3:
-            database = parts[0]
-            schema = parts[1]
-            table = parts[2]
-        elif len(parts) == 4:
-            server = parts[0]
-            database = parts[1]
-            schema = parts[2]
-            table = parts[3]
+        server, database, schema, table = parse_dbpath(parsed_args.src)
             
         out = parsed_args.out or os.getcwd()
         
@@ -124,7 +107,7 @@ class Import(Command):
     
     def get_parser(self, prog_name):
         parser = argparse.ArgumentParser()
-        parser.add_argument('files', action='store', help='File(s) to import')
+        parser.add_argument('src', action='store', help='File(s) to import')
         parser.add_argument('dst', action='store', help='Table name')
         return parser
         
@@ -134,41 +117,17 @@ class Import(Command):
         else:
             delimiter = ','
 
-        server = self.app_args.server
-        database = self.app_args.database
-        schema = None
-        table = None
+        server, database, schema, table = parse_dbpath(parsed_args.dst)
         
-        parts = parsed_args.dst.split('.')
-
-
-        if len(parts) == 1:
-            server = parts[0]
-        elif len(parts) == 2:
-            server = parts[0]
-            database = parts[1]
-        elif len(parts) == 3:
-            server = parts[0]
-            database = parts[1]
-            schema = parts[2]
-        elif len(parts) == 3:
-            server = parts[0]
-            database = parts[1]
-            schema = parts[2]
-        elif len(parts) == 4:
-            server = parts[0]
-            database = parts[1]
-            schema = parts[2]
-            table = parts[3]
-
-        if path.isdir(parsed_args.files) and table:
+        if path.isdir(parsed_args.src) and table:
             raise Exception("If importing a directory, don't specify the table name.")
         
         if not server:
             raise Exception("Need to specify server.")
-            
+
+        self.log.info("Importing...\nFile: {}\nServer: {}\nDatabase: {}\nSchema: {}\nTable: {}".format(parsed_args.src, server, database, schema, table))
         import_files(
-            parsed_args.files,
+            parsed_args.src,
             server,
             database,
             schema,
@@ -181,6 +140,7 @@ class Import(Command):
 def main(argv=sys.argv[1:]):
     myapp = DiepyApp()
     return myapp.run(argv)
-    
+
+
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))
