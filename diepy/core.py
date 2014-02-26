@@ -314,7 +314,9 @@ class ColumnDef(object):
         if self.type == '':
             self.type = 'text'
 
-        if self.type == 'int' and self.max_value > 32768:
+        if self.type == 'int' and self.max_value == 1 and self.min_value == 0:
+            return sqlalchemy.Column(self.name, sqlalchemy.types.BOOLEAN, nullable=self.nullable)
+        elif self.type == 'int' and self.max_value > 32768:
             return sqlalchemy.Column(self.name, sqlalchemy.types.INT, nullable=self.nullable)
         elif self.type == 'int':
             return sqlalchemy.Column(self.name, sqlalchemy.types.SMALLINT, nullable=self.nullable)
