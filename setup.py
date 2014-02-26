@@ -21,7 +21,7 @@ config = {
     'package_dir': {'diepy': 'diepy'},
     'platforms': 'any',
     'tests_require': ['nose'],
-    'install_requires': ['SQLAlchemy', 'python-dateutil', 'cliff'],
+    'install_requires': ['SQLAlchemy', 'python-dateutil', 'cliff', 'openpyxl'],
     'scripts': [],
     'entry_points': {
         'console_scripts': [
