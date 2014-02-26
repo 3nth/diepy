@@ -10,7 +10,7 @@ from cliff.command import Command
 from cliff.commandmanager import CommandManager
 
 import diepy
-from .core import Database, import_files
+from .core import Database, import_files, parse_dbpath
 
 class DiepyApp(App):
     
@@ -26,8 +26,6 @@ class DiepyApp(App):
     def build_option_parser(self, description, version, argparse_kwargs=None):
         parser = super(DiepyApp, self).build_option_parser(description, version, argparse_kwargs)
         parser.add_argument('--config', action='store', default=None, help='Path to config file.')
-        parser.add_argument('-s', '--server', dest='server', help='Database Server to connect to')
-        parser.add_argument('-d', '--database', dest='database', help='Database to connect to.')
         parser.add_argument('--tab', dest='tab', action='store_true', default=False, help='Delimiter')
         
         return parser
@@ -52,11 +50,11 @@ class Export(Command):
     def get_parser(self, prog_name):
         parser = argparse.ArgumentParser()
         parser.add_argument('--unix', action='store_true', help='Use unix line endings')
-        parser.add_argument('--datestamp', action='store_true', help='add a datestamp to the filename')
-        parser.add_argument('--timestamp', action='store_true', help='add a datestamp and timestamp to the filename.')
-        parser.add_argument('--zip', action='store_true', help='zip/gzip file')
-        parser.add_argument('table', action='store', help='Table name')
-        parser.add_argument('out', action='store', help='Export file')
+        parser.add_argument('--datestamp', action='store_true', help='add a datestamp to the filename (ex: -2014.02.24)')
+        parser.add_argument('--timestamp', action='store_true', help='add a datestamp and timestamp to the filename. (ex: -2014.02.24.1345)')
+        parser.add_argument('--zip', action='store_true', help='gzip file. You can also add the .gz extension to the dst path to get compression.')
+        parser.add_argument('src', action='store', help='Table to export (ie. SERVER.DATABASE.SCHEMA.TABLE)')
+        parser.add_argument('dst', action='store', help='Where to export. Defaults to working directory.')
         return parser
         
     def take_action(self, parsed_args):
@@ -65,26 +63,9 @@ class Export(Command):
         else:
             delimiter = ','
         
-        server = self.app_args.server
-        database = self.app_args.database
-        schema = self.app_args.schema
-        
-        parts = parsed_args.table.split('.')
-
-        if len(parts) == 2:
-            schema = parts[0]
-            table = parts[1]
-        elif len(parts) == 3:
-            database = parts[0]
-            schema = parts[1]
-            table = parts[2]
-        elif len(parts) == 4:
-            server = parts[0]
-            database = parts[1]
-            schema = parts[2]
-            table = parts[3]
+        server, database, schema, table = parse_dbpath(parsed_args.src)
             
-        out = parsed_args.out or os.getcwd()
+        out = parsed_args.dst or os.getcwd()
         
         zip = parsed_args.zip or out.endswith('.gz')
         
@@ -124,7 +105,7 @@ class Import(Command):
     
     def get_parser(self, prog_name):
         parser = argparse.ArgumentParser()
-        parser.add_argument('files', action='store', help='File(s) to import')
+        parser.add_argument('src', action='store', nargs='+', help='File(s) to import')
         parser.add_argument('dst', action='store', help='Table name')
         return parser
         
@@ -134,53 +115,38 @@ class Import(Command):
         else:
             delimiter = ','
 
-        server = self.app_args.server
-        database = self.app_args.database
-        schema = None
-        table = None
-        
-        parts = parsed_args.dst.split('.')
-
-
-        if len(parts) == 1:
-            server = parts[0]
-        elif len(parts) == 2:
-            server = parts[0]
-            database = parts[1]
-        elif len(parts) == 3:
-            server = parts[0]
-            database = parts[1]
-            schema = parts[2]
-        elif len(parts) == 3:
-            server = parts[0]
-            database = parts[1]
-            schema = parts[2]
-        elif len(parts) == 4:
-            server = parts[0]
-            database = parts[1]
-            schema = parts[2]
-            table = parts[3]
-
-        if path.isdir(parsed_args.files) and table:
-            raise Exception("If importing a directory, don't specify the table name.")
+        server, database, schema, table = parse_dbpath(parsed_args.dst)
         
         if not server:
             raise Exception("Need to specify server.")
-            
-        import_files(
-            parsed_args.files,
-            server,
-            database,
-            schema,
-            table,
-            delimiter,
-            self.app_args.config
-        )
+
+        self.log.info("Importing...\nFile: {}\nServer: {}\nDatabase: {}\nSchema: {}\nTable: {}".format(parsed_args.src, server, database, schema, table))
+        db = Database(server, database, self.app_args.config)
+
+        for src in parsed_args.src:
+            if path.isdir(src) and table:
+                raise Exception("If importing a directory, don't specify the table name.")
+
+            if path.isfile(src):
+                db.import_file(src, table, schema, delimiter=delimiter)
+            elif path.isdir(parse_args.src):
+                for fpath in [path.join(src, p) for p in os.listdir(src)]:
+                    if not fpath.endswith('.csv'):
+                        continue
+                    db.import_file(fpath, None, schema, delimiter=delimiter)
+            else:
+                raise Exception('Cannot import %s' % src)
+                # for fpath in glob.glob(src):
+#                     if not fpath.endswith('.csv'):
+#                         continue
+#                     db.import_file(fpath, None, schema, delimiter=delimiter)
+
 
 
 def main(argv=sys.argv[1:]):
     myapp = DiepyApp()
     return myapp.run(argv)
-    
+
+
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))

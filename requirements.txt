@@ -7,3 +7,4 @@ pyparsing==2.0.1
 python-dateutil==2.2
 six==1.5.2
 stevedore==0.14.1
+openpyxl==1.8.3
