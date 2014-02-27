@@ -126,7 +126,10 @@ class Database(object):
             if truncate:
                 self.engine.execute(table.delete())
 
-            rows = self.store_data(filepath, table, delimiter)
+            if filepath.endswith('.xlsx'):
+                rows = self.store_xlsx(filepath, table)
+            else:
+                rows = self.store_data(filepath, table, delimiter)
             return rows
 
         except:
@@ -178,6 +181,38 @@ class Database(object):
 
         logger.info("Stored %s records from %s in %s" % (rows, filepath, table.name))
         return rows
+
+    def store_xlsx(self, filepath, table, sheet=None):
+        logger.info("Storing records from excel %s in %s" % (filepath, table.name))
+        cn = self.engine.connect()
+
+        wb = openpyxl.load_workbook(filename=filepath, use_iterators=True)
+        ws = wb.get_sheet_by_name(name=sheet or wb.get_sheet_names()[0])
+
+        rows = -1
+        header = None
+        batch = []
+        for row in ws.iter_rows():
+            rows += 1
+            if rows == 0:
+                header = [c.internal_value for c in row]
+                continue
+
+            values = [c.internal_value for c in row]
+            zipped = zip(header, values)
+            record = dict(zipped)
+            #record = {k: cast_data(k, v, table) for k, v in zipped}
+            batch.append(record)
+
+            if rows % 1000 == 0:
+                cn.execute(table.insert(), batch)
+                logger.info("Imported %s records..." % rows)
+                batch = []
+
+        if batch:
+            cn.execute(table.insert(), batch)
+
+        logger.info("Stored %s records from %s in %s" % (rows, filepath, table.name))
 
     def export_table(self, table, filename, schema=None, unix=False, zip=False):
         mytable = sqlalchemy.Table(table, self.metadata, autoload=True, schema=schema or None)

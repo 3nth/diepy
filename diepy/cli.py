@@ -11,7 +11,7 @@ from cliff.command import Command
 from cliff.commandmanager import CommandManager
 
 import diepy
-from .core import Database, import_files, parse_dbpath
+from .core import Database, parse_dbpath
 
 class DiepyApp(App):
     
@@ -142,7 +142,6 @@ class Import(Command):
                         continue
                     print fpath
                     db.import_file(fpath, None, schema, delimiter=delimiter)
-
 
 
 def main(argv=sys.argv[1:]):
