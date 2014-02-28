@@ -32,11 +32,18 @@ SERVER...TABLE
 
 import a csv file
 
-	diepy import SERVER.DATABASE.SCHEMA.TABLE path/to/some/file.csv
+	diepy import path/to/some/file.csv SERVER.DATABASE.SCHEMA.TABLE
+	# use default schema
+	diepy import path/to/some/file.csv SERVER.DATABASE..TABLE
+	# use the default schema and database
+	diepy import path/to/some/file.csv SERVER...TABLE
+	# use the default schema and database
+	# and name table after file
+	diepy import path/to/some/file.csv SERVER
 
 or a tab delimited file
 
-	diepy import SERVER.DATABASE.SCHEMA.TABLE --tab path/to/some/file.csv
+	diepy import --tab path/to/some/file.csv SERVER.DATABASE.SCHEMA.TABLE
 
 or a whole directory of files
 
@@ -51,6 +58,10 @@ let diepy create a table named the same as the file
 export a table to a csv file
 
 	diepy export SERVER.DATABASE.SCHEMA.TABLE path/to/some/file.csv
+	# using the default schema
+	diepy export SERVER.DATABASE..TABLE path/to/some/file.csv
+	# using the default database and schema
+	diepy export SERVER...TABLE path/to/some/file.csv
 
 export a table to a tab delimited file
 
