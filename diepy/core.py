@@ -358,11 +358,14 @@ def generate_schema_from_excel(filepath, sheet=None, sample_size=20000):
 
     columns = []
     samples = -1
+    unnamed = 0
     for row in ws.iter_rows():
         samples += 1
         if samples == 0:
             for h in row:
-                columns.append(ColumnDef(h.internal_value))
+                if h.interal_value is None:
+                    unnamed += 1
+                columns.append(ColumnDef(h.internal_value or "unnamed%s" % unnamed))
             continue
 
         for i, c in enumerate(row):
@@ -377,34 +380,26 @@ def generate_schema_from_csv(filepath, delimiter=',', sample_size=20000):
     """Generates a table DDL statement based on the file"""
     logger.info("Generating schema for '%s'" % filepath)
     infile = open(filepath, 'rbU')
-    dr = csv.DictReader(infile, delimiter=delimiter)
+    dr = csv.reader(infile, delimiter=delimiter)
 
-    columns = OrderedDict()
-    samples = 0
+    columns = []
+    samples = -1
+    unnamed = 0
     for row in dr:
         samples += 1
-        for field in dr.fieldnames:
-            if not field in columns:
-                columns[field] = ColumnDef(field)
-            columns[field].sample_value(row[field])
+        if samples == 0:
+            for h in row:
+                h = h.strip()
+                if h is None or h == '':
+                    unnamed += 1
+                    h = "unnamed%s" % unnamed
+                columns.append(ColumnDef(h))
+                print "[" + h + "]"
+                continue
+        for i, c in enumerate(row):
+            columns[i].sample_value(c)
         if samples == sample_size:
             break
-
-    return [c for c in columns.values()]
-
-
-def generate_schema(filepath, delimiter=','):
-    """Generates a table DDL statement based on the file"""
-    logger.info("Generating schema for '%s'" % filepath)
-    infile = open(filepath, 'rbU')
-    dr = csv.DictReader(infile, delimiter=delimiter)
-
-    columns = OrderedDict()
-    for row in dr:
-        for field in dr.fieldnames:
-            if not field in columns:
-                columns[field] = ColumnDef(field)
-            columns[field].sample_value(row[field])
 
     return columns
 
