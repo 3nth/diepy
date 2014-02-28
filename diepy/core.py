@@ -7,7 +7,6 @@ import logging
 import os
 from os import path
 import re
-import types
 
 from dateutil.parser import parse
 import openpyxl
