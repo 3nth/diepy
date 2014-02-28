@@ -7,6 +7,7 @@ a stinky wrapper for you database needs
 #### connection strings
 
 these are specified in a configuration file. Configuration file found/used in this order:
+
 1. --config argument. If passed, this is the only file attempted.
 2. A "diepy.ini" file in the cwd
 3. A "diepy.ini" file in the users home folder.
@@ -18,15 +19,17 @@ If database (-d) is passed then it's appended to the connection string "cstring/
 ## diepy does
 
 #### db table references
-SERVER.DATABASE.SCHEMA.TABLE
 
-SERVER is always required. it's the used to look up the connection string in the config file.
-DATABASE is optional. will use default database (which can be configured via the connection string).
-SCHEMA is optional. Will use default schema.
-TABLE is required for exports. If not specified for import, the filename is used. TABLE cannot be used when importing a directory of files. In that case, the filename is used.
+	SERVER.DATABASE.SCHEMA.TABLE
+
+- SERVER is always required. it's the used to look up the connection string in the config file.
+- DATABASE is optional. will use default database (which can be configured via the connection string).
+- SCHEMA is optional. Will use default schema.
+- TABLE is required for exports. If not specified for import, the filename is used. TABLE cannot be used when importing a directory of files. In that case, the filename is used.
 
 If you want to leave out an adjoining element, you can do this:
-SERVER...TABLE
+
+	SERVER...TABLE
 
 #### import
 
