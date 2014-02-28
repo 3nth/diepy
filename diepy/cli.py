@@ -121,13 +121,17 @@ class Import(Command):
         db = Database(server, database, self.app_args.config)
 
         for src in parsed_args.src:
-            if path.isdir(src) and table:
+            if '$' in src:
+                f, sheet = src.split('$')
+            else:
+                f = src
+            if path.isdir(f) and table:
                 raise Exception("If importing a directory, don't specify the table name.")
 
-            if path.isfile(src):
+            if path.isfile(f):
                 db.import_file(src, table, schema, delimiter=delimiter, truncate=parsed_args.truncate)
-            elif path.isdir(src):
-                for fpath in [path.join(src, p) for p in os.listdir(src)]:
+            elif path.isdir(f):
+                for fpath in [path.join(f, p) for p in os.listdir(f)]:
                     if not fpath.endswith('.csv'):
                         continue
                     db.import_file(fpath, None, schema, delimiter=delimiter, truncate=parsed_args.truncate)

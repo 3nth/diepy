@@ -21,7 +21,7 @@ def is_csv(filepath):
 
 
 def is_excel(filepath):
-    regex = re.compile(".*(.xlsx|.xls)(.gz|.zip)?$")
+    regex = re.compile(".*(.xlsx|.xls)(.gz|.zip)?(\$.*)?$")
     return regex.match(filepath)
 
 
@@ -151,23 +151,34 @@ class Database(object):
             logger.exception("Had some trouble storing %s" % filepath)
 
     def import_excel(self, filepath, table_name, schema=None, truncate=False):
-        wb = openpyxl.load_workbook(filename=filepath, use_iterators=True)
+        if '$' in filepath:
+            f, sheet = filepath.split('$')
+        else:
+            f = filepath
+            sheet = None
 
-        for sheet in wb.get_sheet_names():
-            logger.info("Importing worksheet '{}'...".format(sheet))
-            table_name = table_name or sheet
-            ws = wb.get_sheet_by_name(sheet)
+        wb = openpyxl.load_workbook(filename=f, use_iterators=True)
 
-            if not self.table_exists(table_name, schema):
-                columns = generate_schema_from_excel(ws)
-                self.create_table(table_name, columns, schema=schema)
+        if sheet:
+            self.import_worksheet(wb, sheet, table_name, schema, truncate)
+        else:
+            for sheet in wb.get_sheet_names():
+                self.import_worksheet(wb, sheet, table_name, schema, truncate)
 
-            table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
-            if truncate:
-                self.engine.execute(table.delete())
+    def import_worksheet(self, wb, sheet, table_name, schema, truncate=False):
+        logger.info("Importing worksheet '{}'...".format(sheet))
+        table_name = table_name or sheet
+        ws = wb.get_sheet_by_name(sheet)
 
-            rows = self.store_xlsx(ws, table)
+        if not self.table_exists(table_name, schema):
+            columns = generate_schema_from_excel(ws)
+            self.create_table(table_name, columns, schema=schema)
 
+        table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
+        if truncate:
+            self.engine.execute(table.delete())
+
+        rows = self.store_xlsx(ws, table)
 
     def table_exists(self, table_name, schema=None):
         """Determines if a table already exists in the database
