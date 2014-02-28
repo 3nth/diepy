@@ -429,7 +429,7 @@ class ColumnDef(object):
 
         self._determine_type(value)
 
-        if self.type == 'text' and len(value) > self.length:
+        if self.type == 'text' and len(str(value)) > self.length:
             self.length = len(str(value))
 
         if self.type == 'int':
@@ -505,6 +505,8 @@ def is_int(s):
     s = str(s)
     if s.endswith('.0'):
         s = s.split('.')[0]
+    # if s.startswith('0'):
+    #     return False
     try:
         int(s)
         return True
