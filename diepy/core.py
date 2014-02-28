@@ -127,24 +127,47 @@ class Database(object):
         """
 
         try:
-            if not table_name:
-                (table_name, ext) = path.splitext(path.basename(filepath))
+            if is_excel(filepath):
+                self.import_excel(filepath, table_name, schema, truncate)
+            else:
+                if not table_name:
+                    (table_name, ext) = path.splitext(path.basename(filepath))
+
+                if not self.table_exists(table_name, schema):
+                    columns = generate_schema_from_csv(filepath, delimiter)
+                    self.create_table(table_name, columns, schema=schema)
+
+                table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
+                if truncate:
+                    self.engine.execute(table.delete())
+
+                if filepath.endswith('.xlsx'):
+                    rows = self.store_xlsx(filepath, table)
+                else:
+                    rows = self.store_data(filepath, table, delimiter)
+                return rows
+
+        except:
+            logger.exception("Had some trouble storing %s" % filepath)
+
+    def import_excel(self, filepath, table_name, schema=None, truncate=False):
+        wb = openpyxl.load_workbook(filename=filepath, use_iterators=True)
+
+        for sheet in wb.get_sheet_names():
+            logger.info("Importing worksheet '{}'...".format(sheet))
+            table_name = table_name or sheet
+            ws = wb.get_sheet_by_name(sheet)
 
             if not self.table_exists(table_name, schema):
-                self.create_table(table_name, filepath, delimiter, schema=schema)
+                columns = generate_schema_from_excel(ws)
+                self.create_table(table_name, columns, schema=schema)
 
             table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
             if truncate:
                 self.engine.execute(table.delete())
 
-            if filepath.endswith('.xlsx'):
-                rows = self.store_xlsx(filepath, table)
-            else:
-                rows = self.store_data(filepath, table, delimiter)
-            return rows
+            rows = self.store_xlsx(ws, table)
 
-        except:
-            logger.exception("Had some trouble storing %s" % filepath)
 
     def table_exists(self, table_name, schema=None):
         """Determines if a table already exists in the database
@@ -163,7 +186,18 @@ class Database(object):
             logger.warn("Table '%s' does not exist." % table_name)
         return exists
 
-    def create_table(self, table_name, filepath, delimiter, schema=None):
+    def create_table(self, table_name, columns, schema=None):
+        table = sqlalchemy.Table(table_name, self.metadata, schema=schema)
+        if not columns:
+            logger.warn("No columns found")
+            return
+
+        for col in columns:
+            table.append_column(col.emit())
+
+        table.create(self.engine)
+
+    def create_table_from_csv(self, table_name, filepath, delimiter, schema=None):
         logger.info("Creating table for '%s' ..." % filepath)
         table = sqlalchemy.Table(table_name, self.metadata, schema=schema)
         if is_csv(filepath):
@@ -204,12 +238,8 @@ class Database(object):
         logger.info("Stored %s records from %s in %s" % (rows, filepath, table.name))
         return rows
 
-    def store_xlsx(self, filepath, table, sheet=None):
-        logger.info("Storing records from excel %s in %s" % (filepath, table.name))
+    def store_xlsx(self, ws, table, sheet=None):
         cn = self.engine.connect()
-
-        wb = openpyxl.load_workbook(filename=filepath, use_iterators=True)
-        ws = wb.get_sheet_by_name(name=sheet or wb.get_sheet_names()[0])
 
         rows = -1
         header = None
@@ -236,8 +266,7 @@ class Database(object):
 
         if rows == -1:
             logger.warn("No data found.")
-        else:
-            logger.info("Stored %s records from %s in %s" % (rows, filepath, table.name))
+
 
     def export_table(self, table, filename, schema=None, unix=False, zip=False):
         mytable = sqlalchemy.Table(table, self.metadata, autoload=True, schema=schema or None)
@@ -357,12 +386,9 @@ def cast_datetime(v):
 
     return v
 
-def generate_schema_from_excel(filepath, sheet=None, sample_size=20000):
+def generate_schema_from_excel(ws, sheet=None, sample_size=20000):
     """Generates a table DDL statement based on the file"""
-    logger.info("Generating schema for '%s'" % filepath)
-    infile = open(filepath, 'rbU')
-    wb = openpyxl.load_workbook(filename=filepath, use_iterators=True)
-    ws = wb.get_sheet_by_name(name=sheet or wb.get_sheet_names()[0])
+    logger.info("Generating schema for '%s'" % ws)
 
     columns = []
     samples = -1
@@ -371,7 +397,7 @@ def generate_schema_from_excel(filepath, sheet=None, sample_size=20000):
         samples += 1
         if samples == 0:
             for h in row:
-                if h.interal_value is None:
+                if h.internal_value is None:
                     unnamed += 1
                 columns.append(ColumnDef(h.internal_value or "unnamed%s" % unnamed))
             continue
