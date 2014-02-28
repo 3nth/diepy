@@ -67,23 +67,18 @@ class Export(Command):
         server, database, schema, table = parse_dbpath(parsed_args.src)
             
         out = parsed_args.dst or os.getcwd()
-        
+
         zip = parsed_args.zip or out.endswith('.gz')
-        
-        if out.endswith('.csv') or out.endswith('.gz'):
-            fname = path.basename(out)
-            fname = fname.replace('.csv', '').replace('.gz', '')
-            out = path.dirname(out)
-        else:
-            fname = table
-        
-        if parsed_args.datestamp or parsed_args.timestamp:
-            fname = '{}-{:%Y.%m.%d}'.format(fname, datetime.datetime.now())
+        out = out.replace('.gz', '')
+        fname, ext = path.splitext(out)
+        outdir = path.dirname(out)
         
         if parsed_args.timestamp:
-            fname = '{}.{:%H%M}'.format(fname, datetime.datetime.now())
-        
-        out = path.join(out, fname + '.csv')
+            fname = '{}-{:%Y.%m.%d.%H%M}'.format(fname, datetime.datetime.now())
+        elif parsed_args.datestamp:
+            fname = '{}-{:%Y.%m.%d}'.format(fname, datetime.datetime.now())
+
+        out = path.join(outdir, fname + ext)
         
         db = Database(
                 server,
