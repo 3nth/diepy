@@ -6,12 +6,24 @@ import gzip
 import logging
 import os
 from os import path
+import re
+import types
 
 from dateutil.parser import parse
 import openpyxl
 import sqlalchemy
 
 logger = logging.getLogger(__name__)
+
+
+def is_csv(filepath):
+    regex = re.compile(".*(.csv|.tab|.tsv|.txt)(.gz|.zip)?$")
+    return regex.match(filepath)
+
+
+def is_excel(filepath):
+    regex = re.compile(".*(.xlsx|.xls)(.gz|.zip)?$")
+    return regex.match(filepath)
 
 
 def parse_dbpath(dbpath):
@@ -155,8 +167,14 @@ class Database(object):
     def create_table(self, table_name, filepath, delimiter, schema=None):
         logger.info("Creating table for '%s' ..." % filepath)
         table = sqlalchemy.Table(table_name, self.metadata, schema=schema)
-        for k, v in generate_schema(filepath, delimiter).items():
-            table.append_column(v.emit())
+        if is_csv(filepath):
+            columns = generate_schema_from_csv(filepath, delimiter)
+        elif is_excel(filepath):
+            columns = generate_schema_from_excel(filepath)
+        else:
+            raise Exception("Unknown file type: %s" % filepath)
+        for col in columns:
+            table.append_column(col.emit())
 
         table.create(self.engine)
 
@@ -220,8 +238,8 @@ class Database(object):
 
         select = sqlalchemy.sql.select([mytable])
         results = db_connection.execute(select)
-
-        if filename.endswith('.xlsx'):
+        logger.info(filename)
+        if is_excel(filename):
             self.write_xlsx(filename, table, results)
         else:
             self.write_csv(filename, results, unix, zip)
@@ -332,6 +350,49 @@ def cast_datetime(v):
 
     return v
 
+def generate_schema_from_excel(filepath, sheet=None, sample_size=20000):
+    """Generates a table DDL statement based on the file"""
+    logger.info("Generating schema for '%s'" % filepath)
+    infile = open(filepath, 'rbU')
+    wb = openpyxl.load_workbook(filename=filepath, use_iterators=True)
+    ws = wb.get_sheet_by_name(name=sheet or wb.get_sheet_names()[0])
+
+    columns = []
+    samples = -1
+    for row in ws.iter_rows():
+        samples += 1
+        if samples == 0:
+            for h in row:
+                columns.append(ColumnDef(h.internal_value))
+            continue
+
+        for i, c in enumerate(row):
+            columns[i].sample_value(c.internal_value)
+        if samples == sample_size:
+            break
+
+    return columns
+
+
+def generate_schema_from_csv(filepath, delimiter=',', sample_size=20000):
+    """Generates a table DDL statement based on the file"""
+    logger.info("Generating schema for '%s'" % filepath)
+    infile = open(filepath, 'rbU')
+    dr = csv.DictReader(infile, delimiter=delimiter)
+
+    columns = OrderedDict()
+    samples = 0
+    for row in dr:
+        samples += 1
+        for field in dr.fieldnames:
+            if not field in columns:
+                columns[field] = ColumnDef(field)
+            columns[field].sample_value(row[field])
+        if samples == sample_size:
+            break
+
+    return columns
+
 
 def generate_schema(filepath, delimiter=','):
     """Generates a table DDL statement based on the file"""
@@ -367,8 +428,8 @@ class ColumnDef(object):
             self.nullable = True
             return
 
-        if len(value) > self.length:
-            self.length = len(value)
+        if len(str(value)) > self.length:
+            self.length = len(str(value))
 
         if is_int(value) and int(value) < self.min_value:
             self.min_value = int(value)
@@ -407,7 +468,7 @@ class ColumnDef(object):
             self.type = 'text'
 
         if self.type == 'int' and self.max_value == 1 and self.min_value == 0:
-            return sqlalchemy.Column(self.name, sqlalchemy.types.BOOLEAN, nullable=self.nullable)
+            return sqlalchemy.Column(self.name, sqlalchemy.types.SMALLINT, nullable=self.nullable)
         elif self.type == 'int' and self.max_value > 32768:
             return sqlalchemy.Column(self.name, sqlalchemy.types.INT, nullable=self.nullable)
         elif self.type == 'int':
@@ -438,8 +499,11 @@ class ColumnDef(object):
 
 
 def is_int(s):
+    if isinstance(s, (int, long)):
+        return True
+
     try:
-        int(s)
+        int(str(s))
         return True
     except ValueError:
         logger.debug("Value is not an INT: %s" % s)
@@ -447,8 +511,11 @@ def is_int(s):
 
 
 def is_float(s):
+    if isinstance(s, float):
+        return True
+
     try:
-        float(s)
+        float(str(s))
         logger.debug("IS A FLOAT: %s" % s)
         return True
     except ValueError:
@@ -457,12 +524,13 @@ def is_float(s):
 
 
 def is_time(s):
+
     try:
         # parse with two different default dates
         d1 = datetime(2000, 01, 01, 12, 34, 56, 123456)
         d2 = datetime(2007, 10, 20, 14, 32, 12, 654321)
-        v1 = parse(s, default=d1)
-        v2 = parse(s, default=d2)
+        v1 = parse(str(s), default=d1)
+        v2 = parse(str(s), default=d2)
 
         # if the year/month/day end up matching both default dates, then we got time only
         if d1.timetuple()[:3] == v1.timetuple()[:3] and d2.timetuple()[:3] == v2.timetuple()[:3]:
@@ -479,8 +547,8 @@ def is_date(s):
         # parse with two different default dates
         d1 = datetime(2000, 01, 01, 12, 34, 56)
         d2 = datetime(2007, 10, 20, 14, 32, 12)
-        v1 = parse(s, default=d1)
-        v2 = parse(s, default=d2)
+        v1 = parse(str(s), default=d1)
+        v2 = parse(str(s), default=d2)
 
         # if the hour, minute, second, microseconds end up matching both default dates, then we got date only
         if d1.timetuple()[3:6] == v1.timetuple()[3:6] and d2.timetuple()[3:6] == v2.timetuple()[3:6]:
@@ -499,8 +567,8 @@ def is_datetime(s):
         # parse with two different default dates
         d1 = datetime(2000, 01, 01, 12, 34, 56, 123456)
         d2 = datetime(2007, 10, 20, 14, 32, 12, 654321)
-        v1 = parse(s, default=d1)
-        v2 = parse(s, default=d2)
+        v1 = parse(str(s), default=d1)
+        v2 = parse(str(s), default=d2)
 
         # if if doesn't match either, then we've got a date time
         if d1 != v1 and d2 != v2:
