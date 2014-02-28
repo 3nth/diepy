@@ -172,6 +172,11 @@ class Database(object):
             columns = generate_schema_from_excel(filepath)
         else:
             raise Exception("Unknown file type: %s" % filepath)
+
+        if not columns:
+            logger.warn("No columns found")
+            return
+
         for col in columns:
             table.append_column(col.emit())
 
@@ -229,7 +234,10 @@ class Database(object):
         if batch:
             cn.execute(table.insert(), batch)
 
-        logger.info("Stored %s records from %s in %s" % (rows, filepath, table.name))
+        if rows == -1:
+            logger.warn("No data found.")
+        else:
+            logger.info("Stored %s records from %s in %s" % (rows, filepath, table.name))
 
     def export_table(self, table, filename, schema=None, unix=False, zip=False):
         mytable = sqlalchemy.Table(table, self.metadata, autoload=True, schema=schema or None)
