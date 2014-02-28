@@ -394,7 +394,6 @@ def generate_schema_from_csv(filepath, delimiter=',', sample_size=20000):
                     unnamed += 1
                     h = "unnamed%s" % unnamed
                 columns.append(ColumnDef(h))
-                print "[" + h + "]"
                 continue
         for i, c in enumerate(row):
             columns[i].sample_value(c)
