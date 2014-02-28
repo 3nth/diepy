@@ -391,7 +391,7 @@ def generate_schema_from_csv(filepath, delimiter=',', sample_size=20000):
         if samples == sample_size:
             break
 
-    return columns
+    return [c for c in columns.values()]
 
 
 def generate_schema(filepath, delimiter=','):
@@ -428,16 +428,17 @@ class ColumnDef(object):
             self.nullable = True
             return
 
-        if len(str(value)) > self.length:
+        self._determine_type(value)
+
+        if self.type == 'text' and len(value) > self.length:
             self.length = len(str(value))
 
-        if is_int(value) and int(value) < self.min_value:
-            self.min_value = int(value)
+        if self.type == 'int':
+            if int(value) < self.min_value:
+                self.min_value = int(value)
             
-        if is_int(value) and int(value) > self.max_value:
-            self.max_value = int(value)
-
-        self._determine_type(value)
+            if int(value) > self.max_value:
+                self.max_value = int(value)
 
     def _determine_type(self, value):
         if self.type == 'date' and not is_date(value):
@@ -463,7 +464,7 @@ class ColumnDef(object):
 
     def emit(self):
         """Prints the DDL for defining the column"""
-        logger.debug("emitting '%s' as '%s'. Nullable: %s" % (self.name, self.type, self.nullable))
+        # logger.debug("emitting '%s' as '%s'. Nullable: %s" % (self.name, self.type, self.nullable))
         if self.type == '':
             self.type = 'text'
 
@@ -502,24 +503,25 @@ def is_int(s):
     if isinstance(s, (int, long)):
         return True
 
+    s = str(s)
+    if s.endswith('.0'):
+        s = s.split('.')[0]
     try:
-        int(str(s))
+        int(s)
         return True
     except ValueError:
-        logger.debug("Value is not an INT: %s" % s)
+        # logger.debug("Value is not an INT: %s" % s)
         return False
 
 
 def is_float(s):
-    if isinstance(s, float):
-        return True
-
+    s = str(s)
     try:
-        float(str(s))
-        logger.debug("IS A FLOAT: %s" % s)
+        float(s)
+        # logger.debug("IS A FLOAT: %s" % s)
         return True
     except ValueError:
-        logger.debug("Value is not a FLOAT: %s" % s)
+        # logger.debug("Value is not a FLOAT: %s" % s)
         return False
 
 
@@ -538,7 +540,7 @@ def is_time(s):
     except:
         pass
 
-    logger.debug("Value is not a TIME: %s" % s)
+    # logger.debug("Value is not a TIME: %s" % s)
     return False
 
 
@@ -558,7 +560,7 @@ def is_date(s):
     except:
         pass
 
-    logger.debug("Value is not a DATE: %s" % s)
+    # logger.debug("Value is not a DATE: %s" % s)
     return False
 
 
@@ -577,5 +579,5 @@ def is_datetime(s):
     except:
         pass
 
-    logger.debug("Value is not a DATETIME: %s" % s)
+    # logger.debug("Value is not a DATETIME: %s" % s)
     return False
