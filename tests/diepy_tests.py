@@ -41,3 +41,8 @@ def test_basic_export_tab():
 def test_basic_export_xlsx():
     datafile = os.path.join(here, 'export.xlsx')
     db.export_table('basic', datafile)
+
+
+def test_basic_import_xlsx():
+    datafile = os.path.join(here, 'excel.xlsx')
+    db.export_table('basic', datafile)
