@@ -397,6 +397,7 @@ def cast_datetime(v):
 
     return v
 
+
 def generate_schema_from_excel(ws, sheet=None, sample_size=20000):
     """Generates a table DDL statement based on the file"""
     logger.info("Generating schema for '%s'" % ws)
@@ -439,7 +440,7 @@ def generate_schema_from_csv(filepath, delimiter=',', sample_size=20000):
                     unnamed += 1
                     h = "unnamed%s" % unnamed
                 columns.append(ColumnDef(h))
-                continue
+            continue
         for i, c in enumerate(row):
             columns[i].sample_value(c)
         if samples == sample_size:
@@ -508,7 +509,7 @@ class ColumnDef(object):
 
         if self.type == 'int' and self.max_value == 1 and self.min_value == 0:
             return sqlalchemy.Column(self.name, sqlalchemy.types.SMALLINT, nullable=self.nullable)
-        elif self.type == 'int' and self.max_value > 32768:
+        elif self.type == 'int' and self.max_value >= 32768:
             return sqlalchemy.Column(self.name, sqlalchemy.types.INT, nullable=self.nullable)
         elif self.type == 'int':
             return sqlalchemy.Column(self.name, sqlalchemy.types.SMALLINT, nullable=self.nullable)
@@ -541,9 +542,9 @@ def is_int(s):
     if isinstance(s, (int, long)):
         return True
 
-    s = str(s)
-    if s.endswith('.0'):
-        s = s.split('.')[0]
+    # s = str(s)
+    # if s.endswith('.0'):
+    #     s = s.split('.')[0]
     # if s.startswith('0'):
     #     return False
     try:

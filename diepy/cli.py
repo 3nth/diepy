@@ -13,6 +13,7 @@ from cliff.commandmanager import CommandManager
 import diepy
 from .core import Database, parse_dbpath
 
+
 class DiepyApp(App):
     
     log = logging.getLogger(__name__)

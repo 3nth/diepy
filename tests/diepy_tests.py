@@ -1,3 +1,4 @@
+import os
 from nose.tools import *
 import diepy
 from diepy import core
@@ -6,6 +7,8 @@ import logging
 
 logger = logging.getLogger()
 
+here = os.path.abspath(os.path.dirname(__file__))
+db = core.Database('test', config=os.path.join(here, 'diepy.ini'))
 
 def setup():
     print "SETUP!"
@@ -14,45 +17,27 @@ def setup():
 def teardown():
     print "TEAR IT DOWN!"
 
-
-def test_basic():
-    print "I Ran!"
-
-
-def test():
-    pass
-
-
-def test_init_database():
-    db = core.Database('test')
-
-
 def test_basic_import():
-    datafile = 'basic.csv'
-    db = core.Database('test')
+    datafile = os.path.join(here, 'basic.csv')
     rows = db.import_file(datafile, 'basic')
     logger.info("Imported %s rows from %s" % (rows, datafile))
 
 
 def test_basic_export():
-    datafile = 'export.csv'
-    db = core.Database('test')
+    datafile = os.path.join(here,'export.csv')
     db.export_table('basic', datafile)
 
 
 def test_basic_export_gz():
-    datafile = 'export.csv.gz'
-    db = core.Database('test')
+    datafile = os.path.join(here,'export.csv.gz')
     db.export_table('basic', datafile)
 
 
 def test_basic_export_tab():
-    datafile = 'export.tab'
-    db = core.Database('test')
+    datafile = os.path.join(here, 'export.tab')
     db.export_table('basic', datafile)
 
 
 def test_basic_export_xlsx():
-    datafile = 'export.xlsx'
-    db = core.Database('test')
+    datafile = os.path.join(here, 'export.xlsx')
     db.export_table('basic', datafile)
