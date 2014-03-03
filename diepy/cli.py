@@ -11,7 +11,8 @@ from cliff.command import Command
 from cliff.commandmanager import CommandManager
 
 import diepy
-from .core import Database, import_files, parse_dbpath
+from .core import Database, parse_dbpath
+
 
 class DiepyApp(App):
     
@@ -67,23 +68,18 @@ class Export(Command):
         server, database, schema, table = parse_dbpath(parsed_args.src)
             
         out = parsed_args.dst or os.getcwd()
-        
+
         zip = parsed_args.zip or out.endswith('.gz')
-        
-        if out.endswith('.csv') or out.endswith('.gz'):
-            fname = path.basename(out)
-            fname = fname.replace('.csv', '').replace('.gz', '')
-            out = path.dirname(out)
-        else:
-            fname = table
-        
-        if parsed_args.datestamp or parsed_args.timestamp:
-            fname = '{}-{:%Y.%m.%d}'.format(fname, datetime.datetime.now())
+        out = out.replace('.gz', '')
+        fname, ext = path.splitext(out)
+        outdir = path.dirname(out)
         
         if parsed_args.timestamp:
-            fname = '{}.{:%H%M}'.format(fname, datetime.datetime.now())
-        
-        out = path.join(out, fname + '.csv')
+            fname = '{}-{:%Y.%m.%d.%H%M}'.format(fname, datetime.datetime.now())
+        elif parsed_args.datestamp:
+            fname = '{}-{:%Y.%m.%d}'.format(fname, datetime.datetime.now())
+
+        out = path.join(outdir, fname + ext)
         
         db = Database(
                 server,
@@ -126,13 +122,17 @@ class Import(Command):
         db = Database(server, database, self.app_args.config)
 
         for src in parsed_args.src:
-            if path.isdir(src) and table:
+            if '$' in src:
+                f, sheet = src.split('$')
+            else:
+                f = src
+            if path.isdir(f) and table:
                 raise Exception("If importing a directory, don't specify the table name.")
 
-            if path.isfile(src):
+            if path.isfile(f):
                 db.import_file(src, table, schema, delimiter=delimiter, truncate=parsed_args.truncate)
-            elif path.isdir(src):
-                for fpath in [path.join(src, p) for p in os.listdir(src)]:
+            elif path.isdir(f):
+                for fpath in [path.join(f, p) for p in os.listdir(f)]:
                     if not fpath.endswith('.csv'):
                         continue
                     db.import_file(fpath, None, schema, delimiter=delimiter, truncate=parsed_args.truncate)
@@ -142,7 +142,6 @@ class Import(Command):
                         continue
                     print fpath
                     db.import_file(fpath, None, schema, delimiter=delimiter)
-
 
 
 def main(argv=sys.argv[1:]):

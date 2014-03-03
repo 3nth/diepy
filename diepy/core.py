@@ -6,12 +6,23 @@ import gzip
 import logging
 import os
 from os import path
+import re
 
 from dateutil.parser import parse
 import openpyxl
 import sqlalchemy
 
 logger = logging.getLogger(__name__)
+
+
+def is_csv(filepath):
+    regex = re.compile(".*(.csv|.tab|.tsv|.txt)(.gz|.zip)?$")
+    return regex.match(filepath)
+
+
+def is_excel(filepath):
+    regex = re.compile(".*(.xlsx|.xls)(.gz|.zip)?(\$.*)?$")
+    return regex.match(filepath)
 
 
 def parse_dbpath(dbpath):
@@ -116,21 +127,58 @@ class Database(object):
         """
 
         try:
-            if not table_name:
-                (table_name, ext) = path.splitext(path.basename(filepath))
+            if is_excel(filepath):
+                self.import_excel(filepath, table_name, schema, truncate)
+            else:
+                if not table_name:
+                    (table_name, ext) = path.splitext(path.basename(filepath))
 
-            if not self.table_exists(table_name, schema):
-                self.create_table(table_name, filepath, delimiter, schema=schema)
+                if not self.table_exists(table_name, schema):
+                    columns = generate_schema_from_csv(filepath, delimiter)
+                    self.create_table(table_name, columns, schema=schema)
 
-            table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
-            if truncate:
-                self.engine.execute(table.delete())
+                table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
+                if truncate:
+                    self.engine.execute(table.delete())
 
-            rows = self.store_data(filepath, table, delimiter)
-            return rows
+                if filepath.endswith('.xlsx'):
+                    rows = self.store_xlsx(filepath, table)
+                else:
+                    rows = self.store_data(filepath, table, delimiter)
+                return rows
 
         except:
             logger.exception("Had some trouble storing %s" % filepath)
+
+    def import_excel(self, filepath, table_name, schema=None, truncate=False):
+        if '$' in filepath:
+            f, sheet = filepath.split('$')
+        else:
+            f = filepath
+            sheet = None
+
+        wb = openpyxl.load_workbook(filename=f, use_iterators=True)
+
+        if sheet:
+            self.import_worksheet(wb, sheet, table_name, schema, truncate)
+        else:
+            for sheet in wb.get_sheet_names():
+                self.import_worksheet(wb, sheet, table_name, schema, truncate)
+
+    def import_worksheet(self, wb, sheet, table_name, schema, truncate=False):
+        logger.info("Importing worksheet '{}'...".format(sheet))
+        table_name = table_name or sheet
+        ws = wb.get_sheet_by_name(sheet)
+
+        if not self.table_exists(table_name, schema):
+            columns = generate_schema_from_excel(ws)
+            self.create_table(table_name, columns, schema=schema)
+
+        table = sqlalchemy.Table(table_name, self.metadata, autoload=True, schema=schema)
+        if truncate:
+            self.engine.execute(table.delete())
+
+        rows = self.store_xlsx(ws, table)
 
     def table_exists(self, table_name, schema=None):
         """Determines if a table already exists in the database
@@ -149,11 +197,33 @@ class Database(object):
             logger.warn("Table '%s' does not exist." % table_name)
         return exists
 
-    def create_table(self, table_name, filepath, delimiter, schema=None):
+    def create_table(self, table_name, columns, schema=None):
+        table = sqlalchemy.Table(table_name, self.metadata, schema=schema)
+        if not columns:
+            logger.warn("No columns found")
+            return
+
+        for col in columns:
+            table.append_column(col.emit())
+
+        table.create(self.engine)
+
+    def create_table_from_csv(self, table_name, filepath, delimiter, schema=None):
         logger.info("Creating table for '%s' ..." % filepath)
         table = sqlalchemy.Table(table_name, self.metadata, schema=schema)
-        for k, v in generate_schema(filepath, delimiter).items():
-            table.append_column(v.emit())
+        if is_csv(filepath):
+            columns = generate_schema_from_csv(filepath, delimiter)
+        elif is_excel(filepath):
+            columns = generate_schema_from_excel(filepath)
+        else:
+            raise Exception("Unknown file type: %s" % filepath)
+
+        if not columns:
+            logger.warn("No columns found")
+            return
+
+        for col in columns:
+            table.append_column(col.emit())
 
         table.create(self.engine)
 
@@ -179,14 +249,44 @@ class Database(object):
         logger.info("Stored %s records from %s in %s" % (rows, filepath, table.name))
         return rows
 
+    def store_xlsx(self, ws, table, sheet=None):
+        cn = self.engine.connect()
+
+        rows = -1
+        header = None
+        batch = []
+        for row in ws.iter_rows():
+            rows += 1
+            if rows == 0:
+                header = [c.internal_value for c in row]
+                continue
+
+            values = [c.internal_value for c in row]
+            zipped = zip(header, values)
+            record = dict(zipped)
+            #record = {k: cast_data(k, v, table) for k, v in zipped}
+            batch.append(record)
+
+            if rows % 1000 == 0:
+                cn.execute(table.insert(), batch)
+                logger.info("Imported %s records..." % rows)
+                batch = []
+
+        if batch:
+            cn.execute(table.insert(), batch)
+
+        if rows == -1:
+            logger.warn("No data found.")
+
+
     def export_table(self, table, filename, schema=None, unix=False, zip=False):
         mytable = sqlalchemy.Table(table, self.metadata, autoload=True, schema=schema or None)
         db_connection = self.engine.connect()
 
         select = sqlalchemy.sql.select([mytable])
         results = db_connection.execute(select)
-
-        if filename.endswith('.xlsx'):
+        logger.info(filename)
+        if is_excel(filename):
             self.write_xlsx(filename, table, results)
         else:
             self.write_csv(filename, results, unix, zip)
@@ -298,18 +398,53 @@ def cast_datetime(v):
     return v
 
 
-def generate_schema(filepath, delimiter=','):
+def generate_schema_from_excel(ws, sheet=None, sample_size=20000):
+    """Generates a table DDL statement based on the file"""
+    logger.info("Generating schema for '%s'" % ws)
+
+    columns = []
+    samples = -1
+    unnamed = 0
+    for row in ws.iter_rows():
+        samples += 1
+        if samples == 0:
+            for h in row:
+                if h.internal_value is None:
+                    unnamed += 1
+                columns.append(ColumnDef(h.internal_value or "unnamed%s" % unnamed))
+            continue
+
+        for i, c in enumerate(row):
+            columns[i].sample_value(c.internal_value)
+        if samples == sample_size:
+            break
+
+    return columns
+
+
+def generate_schema_from_csv(filepath, delimiter=',', sample_size=20000):
     """Generates a table DDL statement based on the file"""
     logger.info("Generating schema for '%s'" % filepath)
     infile = open(filepath, 'rbU')
-    dr = csv.DictReader(infile, delimiter=delimiter)
+    dr = csv.reader(infile, delimiter=delimiter)
 
-    columns = OrderedDict()
+    columns = []
+    samples = -1
+    unnamed = 0
     for row in dr:
-        for field in dr.fieldnames:
-            if not field in columns:
-                columns[field] = ColumnDef(field)
-            columns[field].sample_value(row[field])
+        samples += 1
+        if samples == 0:
+            for h in row:
+                h = h.strip()
+                if h is None or h == '':
+                    unnamed += 1
+                    h = "unnamed%s" % unnamed
+                columns.append(ColumnDef(h))
+            continue
+        for i, c in enumerate(row):
+            columns[i].sample_value(c)
+        if samples == sample_size:
+            break
 
     return columns
 
@@ -332,16 +467,17 @@ class ColumnDef(object):
             self.nullable = True
             return
 
-        if len(value) > self.length:
-            self.length = len(value)
-
-        if is_int(value) and int(value) < self.min_value:
-            self.min_value = int(value)
-            
-        if is_int(value) and int(value) > self.max_value:
-            self.max_value = int(value)
-
         self._determine_type(value)
+
+        if self.type == 'text' and len(str(value)) > self.length:
+            self.length = len(str(value))
+
+        if self.type == 'int':
+            if int(value) < self.min_value:
+                self.min_value = int(value)
+            
+            if int(value) > self.max_value:
+                self.max_value = int(value)
 
     def _determine_type(self, value):
         if self.type == 'date' and not is_date(value):
@@ -367,13 +503,13 @@ class ColumnDef(object):
 
     def emit(self):
         """Prints the DDL for defining the column"""
-        logger.debug("emitting '%s' as '%s'. Nullable: %s" % (self.name, self.type, self.nullable))
+        # logger.debug("emitting '%s' as '%s'. Nullable: %s" % (self.name, self.type, self.nullable))
         if self.type == '':
             self.type = 'text'
 
         if self.type == 'int' and self.max_value == 1 and self.min_value == 0:
-            return sqlalchemy.Column(self.name, sqlalchemy.types.BOOLEAN, nullable=self.nullable)
-        elif self.type == 'int' and self.max_value > 32768:
+            return sqlalchemy.Column(self.name, sqlalchemy.types.SMALLINT, nullable=self.nullable)
+        elif self.type == 'int' and self.max_value >= 32768:
             return sqlalchemy.Column(self.name, sqlalchemy.types.INT, nullable=self.nullable)
         elif self.type == 'int':
             return sqlalchemy.Column(self.name, sqlalchemy.types.SMALLINT, nullable=self.nullable)
@@ -403,31 +539,41 @@ class ColumnDef(object):
 
 
 def is_int(s):
+    if isinstance(s, (int, long)):
+        return True
+
+    # s = str(s)
+    # if s.endswith('.0'):
+    #     s = s.split('.')[0]
+    # if s.startswith('0'):
+    #     return False
     try:
         int(s)
         return True
     except ValueError:
-        logger.debug("Value is not an INT: %s" % s)
+        # logger.debug("Value is not an INT: %s" % s)
         return False
 
 
 def is_float(s):
+    s = str(s)
     try:
         float(s)
-        logger.debug("IS A FLOAT: %s" % s)
+        # logger.debug("IS A FLOAT: %s" % s)
         return True
     except ValueError:
-        logger.debug("Value is not a FLOAT: %s" % s)
+        # logger.debug("Value is not a FLOAT: %s" % s)
         return False
 
 
 def is_time(s):
+
     try:
         # parse with two different default dates
         d1 = datetime(2000, 01, 01, 12, 34, 56, 123456)
         d2 = datetime(2007, 10, 20, 14, 32, 12, 654321)
-        v1 = parse(s, default=d1)
-        v2 = parse(s, default=d2)
+        v1 = parse(str(s), default=d1)
+        v2 = parse(str(s), default=d2)
 
         # if the year/month/day end up matching both default dates, then we got time only
         if d1.timetuple()[:3] == v1.timetuple()[:3] and d2.timetuple()[:3] == v2.timetuple()[:3]:
@@ -435,7 +581,7 @@ def is_time(s):
     except:
         pass
 
-    logger.debug("Value is not a TIME: %s" % s)
+    # logger.debug("Value is not a TIME: %s" % s)
     return False
 
 
@@ -444,8 +590,8 @@ def is_date(s):
         # parse with two different default dates
         d1 = datetime(2000, 01, 01, 12, 34, 56)
         d2 = datetime(2007, 10, 20, 14, 32, 12)
-        v1 = parse(s, default=d1)
-        v2 = parse(s, default=d2)
+        v1 = parse(str(s), default=d1)
+        v2 = parse(str(s), default=d2)
 
         # if the hour, minute, second, microseconds end up matching both default dates, then we got date only
         if d1.timetuple()[3:6] == v1.timetuple()[3:6] and d2.timetuple()[3:6] == v2.timetuple()[3:6]:
@@ -455,7 +601,7 @@ def is_date(s):
     except:
         pass
 
-    logger.debug("Value is not a DATE: %s" % s)
+    # logger.debug("Value is not a DATE: %s" % s)
     return False
 
 
@@ -464,8 +610,8 @@ def is_datetime(s):
         # parse with two different default dates
         d1 = datetime(2000, 01, 01, 12, 34, 56, 123456)
         d2 = datetime(2007, 10, 20, 14, 32, 12, 654321)
-        v1 = parse(s, default=d1)
-        v2 = parse(s, default=d2)
+        v1 = parse(str(s), default=d1)
+        v2 = parse(str(s), default=d2)
 
         # if if doesn't match either, then we've got a date time
         if d1 != v1 and d2 != v2:
@@ -474,5 +620,5 @@ def is_datetime(s):
     except:
         pass
 
-    logger.debug("Value is not a DATETIME: %s" % s)
+    # logger.debug("Value is not a DATETIME: %s" % s)
     return False
