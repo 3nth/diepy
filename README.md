@@ -12,9 +12,15 @@ these are specified in a configuration file. Configuration file found/used in th
 2. A "diepy.ini" file in the cwd
 3. A "diepy.ini" file in the users home folder.
 
-The configuration file has a single section, servers, which has a key = connection string listing of servers. The -s argument corresponds to a key here. The connection strings are used by SqlAlchemy so refer to their doc on how to write one.
+The configuration file has a single section, servers, which has a key = connection string listing of servers, where key is the SERVER name you'll use on the command line.
 
-If database (-d) is passed then it's appended to the connection string "cstring/database"
+	[servers]
+	test = sqlite:///test.db
+	production = postgresql:///user:pass@server
+	
+
+The connection strings are used by SQLAlchemy so refer to their doc on how to write one.
+
 
 ## diepy does
 
