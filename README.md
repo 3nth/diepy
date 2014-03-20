@@ -12,9 +12,15 @@ these are specified in a configuration file. Configuration file found/used in th
 2. A "diepy.ini" file in the cwd
 3. A "diepy.ini" file in the users home folder.
 
-The configuration file has a single section, servers, which has a key = connection string listing of servers. The -s argument corresponds to a key here. The connection strings are used by SqlAlchemy so refer to their doc on how to write one.
+The configuration file has a single section, servers, which has a key = connection string listing of servers, where key is the SERVER name you'll use on the command line.
 
-If database (-d) is passed then it's appended to the connection string "cstring/database"
+	[servers]
+	test = sqlite:///test.db
+	production = postgresql:///user:pass@server
+	
+
+The connection strings are used by SQLAlchemy so refer to their doc on how to write one.
+
 
 ## diepy does
 
@@ -36,12 +42,14 @@ If you want to leave out an adjoining element, you can do this:
 import a csv file
 
 	diepy import path/to/some/file.csv SERVER.DATABASE.SCHEMA.TABLE
+	
 	# use default schema
 	diepy import path/to/some/file.csv SERVER.DATABASE..TABLE
+	
 	# use the default schema and database
 	diepy import path/to/some/file.csv SERVER...TABLE
-	# use the default schema and database
-	# and name table after file
+	
+	# use the default schema and database and name table after file
 	diepy import path/to/some/file.csv SERVER
 
 or a tab delimited file
@@ -61,15 +69,17 @@ let diepy create a table named the same as the file
 export a table to a csv file
 
 	diepy export SERVER.DATABASE.SCHEMA.TABLE path/to/some/file.csv
+	
 	# using the default schema
 	diepy export SERVER.DATABASE..TABLE path/to/some/file.csv
+	
 	# using the default database and schema
 	diepy export SERVER...TABLE path/to/some/file.csv
 
 export a table to a tab delimited file
 
 	diepy export SERVER.DATABASE.SCHEMA.TABLE path/to/some/file.tsv
-    diepy export SERVER.DATABASE.SCHEMA.TABLE path/to/some/file.tab
+	diepy export SERVER.DATABASE.SCHEMA.TABLE path/to/some/file.tab
 
 export a table to a gzip'd csv file
 
