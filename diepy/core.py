@@ -1,4 +1,5 @@
 import csv
+import codecs
 from collections import OrderedDict
 from ConfigParser import SafeConfigParser
 from datetime import datetime
@@ -236,7 +237,7 @@ class Database(object):
         batch = []
         for row in dr:
             rows += 1
-            record = {k: cast_data(k, v, table) for k, v in row.items()}
+            record = {k.replace(codecs.BOM_UTF8, ''): cast_data(k, v, table) for k, v in row.items()}
             batch.append(record)
             if rows % 1000 == 0:
                 cn.execute(table.insert(), batch)
@@ -367,20 +368,21 @@ class Database(object):
 
 
 def cast_data(k, v, table):
-
+    k = k.replace(codecs.BOM_UTF8, '')
     if v is None or v == '':
         return None
 
     #logger.debug('Attempting to cast %s as %s ...' % (v, table.c[k].type))
     if isinstance(table.c[k].type, sqlalchemy.types.DATETIME) or isinstance(table.c[k].type, sqlalchemy.types.DATE):
         v = parse(v)
+        return v
 
     if isinstance(table.c[k].type, sqlalchemy.types.TIME):
         dt = parse(v)
         v = dt.time()
+        return v
 
-    #logger.debug(v)
-    return v
+    return unicode(v, 'utf-8')
 
 
 def cast_datetime(v):
@@ -427,7 +429,7 @@ def generate_schema_from_csv(filepath, delimiter=',', sample_size=20000):
     logger.info("Generating schema for '%s'" % filepath)
     infile = open(filepath, 'rbU')
     dr = csv.reader(infile, delimiter=delimiter)
-
+    
     columns = []
     samples = -1
     unnamed = 0
@@ -435,7 +437,7 @@ def generate_schema_from_csv(filepath, delimiter=',', sample_size=20000):
         samples += 1
         if samples == 0:
             for h in row:
-                h = h.strip()
+                h = h.strip().replace(codecs.BOM_UTF8, '')
                 if h is None or h == '':
                     unnamed += 1
                     h = "unnamed%s" % unnamed
