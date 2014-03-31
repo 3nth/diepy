@@ -471,8 +471,8 @@ class ColumnDef(object):
 
         self._determine_type(value)
 
-        if self.type == 'text' and len(str(value)) > self.length:
-            self.length = len(str(value))
+        if self.type == 'text' and len(unicode(value)) > self.length:
+            self.length = len(unicode(value))
 
         if self.type == 'int':
             if int(value) < self.min_value:
@@ -552,7 +552,7 @@ def is_int(s):
     try:
         int(s)
         return True
-    except ValueError:
+    except:
         # logger.debug("Value is not an INT: %s" % s)
         return False
 
@@ -563,7 +563,7 @@ def is_float(s):
         float(s)
         # logger.debug("IS A FLOAT: %s" % s)
         return True
-    except ValueError:
+    except:
         # logger.debug("Value is not a FLOAT: %s" % s)
         return False
 
