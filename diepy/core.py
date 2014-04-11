@@ -164,7 +164,10 @@ class Database(object):
             self.import_worksheet(wb, sheet, table_name, schema, truncate)
         else:
             for sheet in wb.get_sheet_names():
-                self.import_worksheet(wb, sheet, table_name, schema, truncate)
+                try:
+                    self.import_worksheet(wb, sheet, table_name, schema, truncate)
+                except:
+                    logger.exception("Had trouble importing worksheet: %s" % sheet)
 
     def import_worksheet(self, wb, sheet, table_name, schema, truncate=False):
         logger.info("Importing worksheet '{}'...".format(sheet))
@@ -201,8 +204,7 @@ class Database(object):
     def create_table(self, table_name, columns, schema=None):
         table = sqlalchemy.Table(table_name, self.metadata, schema=schema)
         if not columns:
-            logger.warn("No columns found")
-            return
+            raise Exception("No columns defines for %s" % table_name)
 
         for col in columns:
             table.append_column(col.emit())
@@ -278,6 +280,8 @@ class Database(object):
 
         if rows == -1:
             logger.warn("No data found.")
+        else:
+            logger.info("Stored %s records in %s" % (rows, table.name))
 
 
     def export_table(self, table, filename, schema=None, unix=False, zip=False):
