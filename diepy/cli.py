@@ -141,7 +141,7 @@ class Import(Command):
                     if not fpath.endswith('.csv'):
                         continue
                     print fpath
-                    db.import_file(fpath, None, schema, delimiter=delimiter)
+                    db.import_file(fpath, None, schema, delimiter=delimiter, truncate=parsed_args.truncate)
 
 
 def main(argv=sys.argv[1:]):
