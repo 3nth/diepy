@@ -1,6 +1,5 @@
 import csv
 import codecs
-from collections import OrderedDict
 from ConfigParser import SafeConfigParser
 from datetime import datetime
 import gzip
@@ -184,6 +183,8 @@ class Database(object):
 
         rows = self.store_xlsx(ws, table)
 
+        return rows
+
     def table_exists(self, table_name, schema=None):
         """Determines if a table already exists in the database
 
@@ -267,7 +268,7 @@ class Database(object):
             values = [c.internal_value for c in row]
             zipped = zip(header, values)
             record = dict(zipped)
-            #record = {k: cast_data(k, v, table) for k, v in zipped}
+            # record = {k: cast_data(k, v, table) for k, v in zipped}
             batch.append(record)
 
             if rows % 1000 == 0:
@@ -282,7 +283,6 @@ class Database(object):
             logger.warn("No data found.")
         else:
             logger.info("Stored %s records in %s" % (rows, table.name))
-
 
     def export_table(self, table, filename, schema=None, unix=False, zip=False):
         mytable = sqlalchemy.Table(table, self.metadata, autoload=True, schema=schema or None)
@@ -322,7 +322,7 @@ class Database(object):
                     lineterminator=lineterminator,
                     delimiter=delimiter,
                     fieldnames=fieldnames)
-            headers = dict((n, n) for n in fieldnames)
+            headers = dict((n, unicode(n)) for n in fieldnames)
             writer.writerow(headers)
             records = 0
             for row in data:
@@ -368,7 +368,7 @@ class Database(object):
             return 0
         if type(value) is datetime:
             return value.isoformat()
-        return value
+        return unicode(value)
 
 
 def cast_data(k, v, table):
@@ -376,7 +376,7 @@ def cast_data(k, v, table):
     if v is None or v == '':
         return None
 
-    #logger.debug('Attempting to cast %s as %s ...' % (v, table.c[k].type))
+    # logger.debug('Attempting to cast %s as %s ...' % (v, table.c[k].type))
     if isinstance(table.c[k].type, sqlalchemy.types.DATETIME) or isinstance(table.c[k].type, sqlalchemy.types.DATE):
         v = parse(v)
         return v
@@ -529,19 +529,19 @@ class ColumnDef(object):
             return sqlalchemy.Column(self.name, sqlalchemy.types.TIME, nullable=self.nullable)
         elif self.type == 'text':
             if self.length < 50:
-                return sqlalchemy.Column(self.name, sqlalchemy.String(50), nullable=self.nullable)
+                return sqlalchemy.Column(self.name, sqlalchemy.Unicode(50), nullable=self.nullable)
             elif self.length < 100:
-                return sqlalchemy.Column(self.name, sqlalchemy.String(100), nullable=self.nullable)
+                return sqlalchemy.Column(self.name, sqlalchemy.Unicode(100), nullable=self.nullable)
             elif self.length < 200:
-                return sqlalchemy.Column(self.name, sqlalchemy.String(200), nullable=self.nullable)
+                return sqlalchemy.Column(self.name, sqlalchemy.Unicode(200), nullable=self.nullable)
             elif self.length < 500:
-                return sqlalchemy.Column(self.name, sqlalchemy.String(500), nullable=self.nullable)
+                return sqlalchemy.Column(self.name, sqlalchemy.Unicode(500), nullable=self.nullable)
             elif self.length < 1000:
-                return sqlalchemy.Column(self.name, sqlalchemy.String(1000), nullable=self.nullable)
+                return sqlalchemy.Column(self.name, sqlalchemy.Unicode(1000), nullable=self.nullable)
             elif self.length < 4000:
-                return sqlalchemy.Column(self.name, sqlalchemy.String(4000), nullable=self.nullable)
+                return sqlalchemy.Column(self.name, sqlalchemy.Unicode(4000), nullable=self.nullable)
             else:
-                return sqlalchemy.Column(self.name, sqlalchemy.types.TEXT, nullable=self.nullable)
+                return sqlalchemy.Column(self.name, sqlalchemy.types.UnicodeText, nullable=self.nullable)
 
 
 def is_int(s):
