@@ -284,7 +284,7 @@ class Database(object):
         else:
             logger.info("Stored %s records in %s" % (rows, table.name))
 
-    def export_table(self, table, filename, schema=None, unix=False, zip=False):
+    def export_table(self, table, filename, schema=None, unix=False, windows=False, zip=False):
         mytable = sqlalchemy.Table(table, self.metadata, autoload=True, schema=schema or None)
         db_connection = self.engine.connect()
 
@@ -292,9 +292,9 @@ class Database(object):
         results = db_connection.execute(select)
         logger.info(filename)
         if is_excel(filename):
-            self.write_xlsx(filename, table, results)
+            return self.write_xlsx(filename, table, results)
         else:
-            self.write_csv(filename, results, unix, zip)
+            return self.write_csv(filename, results, unix=unix, windows=windows, zip=zip)
 
     def write_csv(self, filename, data, unix=False, windows=False, zip=False):
         if zip:
@@ -334,6 +334,7 @@ class Database(object):
             f.close()
 
         logger.info("Wrote %s records to %s" % (records, filename))
+        return records
 
     def write_xlsx(self, filename, tablename, data):
         if path.isfile(filename):
@@ -351,11 +352,14 @@ class Database(object):
         for c, title in enumerate(data.keys()):
             ws.cell(row=0, column=c).value = title
         
+        records = 0
         for r, row in enumerate(data):
+            records += 1
             for c, value in enumerate(row):
                 ws.cell(row=r + 1, column=c).value = value
         
         wb.save(filename=filename)
+        return records
 
     @staticmethod
     def _cleanbool(value):

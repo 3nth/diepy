@@ -52,6 +52,7 @@ class Export(Command):
     def get_parser(self, prog_name):
         parser = argparse.ArgumentParser()
         parser.add_argument('--unix', action='store_true', help='Use unix line endings')
+        parser.add_argument('--windows', action='store_true', help='Use windows line endings')
         parser.add_argument('--datestamp', action='store_true', help='add a datestamp to the filename (ex: -2014.02.24)')
         parser.add_argument('--timestamp', action='store_true', help='add a datestamp and timestamp to the filename. (ex: -2014.02.24.1345)')
         parser.add_argument('--zip', action='store_true', help='gzip file. You can also add the .gz extension to the dst path to get compression.')
@@ -68,6 +69,9 @@ class Export(Command):
         server, database, schema, table = parse_dbpath(parsed_args.src)
             
         out = parsed_args.dst or os.getcwd()
+
+        if parsed_args.unix and parsed_args.windows:
+            raise Exception("Cannot use both --unix and --windows flags.")
 
         zip = parsed_args.zip or out.endswith('.gz')
         out = out.replace('.gz', '')
@@ -89,9 +93,10 @@ class Export(Command):
         db.export_table(
             table,
             out,
-            schema,
-            parsed_args.unix,
-            zip
+            schema=schema,
+            unix=parsed_args.unix,
+            windows=parse_args.windows,
+            zip=zip
         )
 
 
