@@ -1,4 +1,4 @@
-SQLAlchemy==0.9.3
+SQLAlchemy==0.9.8
 cliff==1.5.2
 cmd2==0.6.7
 nose==1.3.0
